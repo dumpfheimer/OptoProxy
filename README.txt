@@ -1,7 +1,7 @@
 ABOUT THIS PROJECT
 
 This project runs on ESP8266 (and probably is easily portable to ESP32) and connects to WiFi and Viessmann Heaters using Optolink (https://github.com/openv/openv/wiki/Die-Optolink-Schnittstelle) with a self-made adapter (https://github.com/openv/openv/wiki/Bauanleitung)
-
+If you have a 3D printer check out OptolinkConnector.blend and OptolinkConnector.stl
 
 INSTALL INSTRUCTIONS (WIP)
 
