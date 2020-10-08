@@ -1,3 +1,8 @@
+ABOUT THIS PROJECT
+
+This project runs on ESP8266 (and probably is easily portable to ESP32) and connects to WiFi and Viessmann Heaters using Optolink (https://github.com/openv/openv/wiki/Die-Optolink-Schnittstelle) with a self-made adapter (https://github.com/openv/openv/wiki/Bauanleitung)
+
+
 INSTALL INSTRUCTIONS (WIP)
 
 1. Download and install Arduino IDE
