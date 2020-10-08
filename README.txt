@@ -14,6 +14,8 @@ INSTALL INSTRUCTIONS (WIP)
 
 5. Add the VitoWifi Library to your project (not sure if you actually need to do that?!)
 
-6. Hit compile
+6. copy wifi-credentials.h.example to wifi-credentials.h and change the credentials to your desire
 
-7. Open an issue with the error and hope for help
+7. Hit compile
+
+8. Open an issue with the error and hope for help

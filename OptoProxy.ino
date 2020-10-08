@@ -9,6 +9,7 @@
 #include <ESP8266WebServer.h>
 #include <SoftwareSerial.h>
 
+#include "wifi-credentials.h"
 
 // pin 2->D9
 // pin 0->D8
@@ -17,9 +18,6 @@
 
 
 ESP8266WebServer server(80);
-
-const char* kSsid = "CHANGEME";
-const char* kPassword = "CHANGEME";
 
 OPTOLINK_CLASS optolink;
 
