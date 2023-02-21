@@ -16,7 +16,6 @@ void setup() {
   setupLogging();
   println("hello! logging started");
 
-  
   WiFi.mode(WIFI_STA);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   
@@ -49,48 +48,11 @@ void setup() {
   if (useLogging()) {
     optolink.setLogger(getLogger());
   }
-
-  #if OPTOLINK_LOOP_THREADED == true
-  xTaskCreatePinnedToCore(
-                    optolinkLoop,   /* Task function. */
-                    "optolinkTask",     /* name of task. */
-                    10000,       /* Stack size of task */
-                    NULL,        /* parameter of the task */
-                    1,           /* priority of the task */
-                    &optolinkTaskHandle,      /* Task handle to keep track of created task */
-                    OPTOLINK_LOOP_CORE);          /* pin task to core 0 */  
-  #endif
-  
-  #if HTTPSERVER_LOOP_THREADED == true
-  xTaskCreatePinnedToCore(
-                    httpServerLoop,   /* Task function. */
-                    "httpServerTask",     /* name of task. */
-                    10000,       /* Stack size of task */
-                    NULL,        /* parameter of the task */
-                    1,           /* priority of the task */
-                    &httpserverTaskHandle,      /* Task handle to keep track of created task */
-                    HTTPSERVER_LOOP_CORE);          /* pin task to core 0 */  
-  #endif
 }
 OPTOLINK_CLASS* getOptolink() {
   return &optolink;
 }
-void optolinkLoop(void * pvParameters) {
-  while(1) {
-    optolink.loop();
-  }
-}
-void httpServerLoop(void * pvParameters) {
-  while(1) {
-    server.handleClient();
-  }
-}
 void loop() {
-  #if OPTOLINK_LOOP_THREADED == false
   optolink.loop();
-  #endif
-  
-  #if HTTPSERVER_LOOP_THREADED == false
   server.handleClient();
-  #endif
 }

@@ -35,33 +35,16 @@
 #define OPTOLINK_IN 2 //D9
 
 #ifdef ESP8266
-#define CONFIGURED
 
 // CONFIGURATION FOR ESP8266
-#define OPTOLINK_LOOP_THREADED false
-#define OPTOLINK_LOOP_CORE 0
-#define HTTPSERVER_LOOP_THREADED false
-#define HTTPSERVER_LOOP_CORE 0
 #define LOGGING_SERIAL SoftwareSerial
 
 
 #endif
 #ifdef ESP32
-#define CONFIGURED
-#define OPTOLINK_LOOP_THREADED true
-#define OPTOLINK_LOOP_CORE 1
 #define OPTOLINK_SERIAL_RX 3
 #define OPTOLINK_SERIAL_TX 1
-#define HTTPSERVER_LOOP_THREADED false
-#define HTTPSERVER_LOOP_CORE 0
 #define LOGGING_SERIAL HardwareSerial
-
-#endif
-#ifndef CONFIGURED
-#define OPTOLINK_LOOP_THREADED false
-#define OPTOLINK_LOOP_CORE 0
-#define HTTPSERVER_LOOP_THREADED false
-#define HTTPSERVER_LOOP_CORE 0
 
 #endif
 
@@ -75,14 +58,6 @@ extern ESP8266WebServer server;
 extern WebServer server;
 #endif
 
-
-#if OPTOLINK_LOOP_THREADED == true
-TaskHandle_t optolinkTaskHandle;
-#endif
-
-#if HTTPSERVER_LOOP_THREADED == true
-TaskHandle_t httpserverTaskHandle;
-#endif
 
 OPTOLINK_CLASS* getOptolink();
 
