@@ -1,16 +1,9 @@
-#include <DPValue.hpp>
-#include <Datapoint.hpp>
+#include "httpHandlers.h"
 
 void handleRoot() {
   server.send(200, "text/plain", "usage: /get?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop");
 }
 
-String readToString(int addr, int conversion) {
-    return readToString(addr, conversion, false, 0);
-}
-String readToString(int addr, int conversion, int len) {
-    return readToString(addr, conversion, true, len);
-}
 String readToString(int addr, int conversion, bool forceLen, int len) {
   unsigned long timeout = millis() + 15000UL;
   
@@ -93,13 +86,25 @@ String readToString(int addr, int conversion, bool forceLen, int len) {
   dpv.getString(retBuff, sizeof(retBuff));
   return retBuff;
 }
+String readToString(int addr, int conversion) {
+    return readToString(addr, conversion, false, 0);
+}
+String readToString(int addr, int conversion, int len) {
+    return readToString(addr, conversion, true, len);
+}
 bool writeFromString(int addr, int conversion, String value) {
   uint8_t len = 2;
   uint8_t intValues[4];
   unsigned long timeout = millis() + 15000UL;
 
   bool canWrite = false;
+  if(addr == 0x7100) canWrite = true; // kühlart
+  if(addr == 0x7101) canWrite = true; // heizkreis
+  if(addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
   if(addr == 0x7103) canWrite = true; // min vorlauftemp kühlen
+  if(addr == 0x7104) canWrite = true; // einfluss raumtemp kühlen
+  if(addr == 0x7106) canWrite = true; // witterungs / raumtemperaturgeführte kühlung
+  if(addr == 0x7107) canWrite = true; // welcher heizkreis / tempsensor für kühlung
   if(addr == 0x7110) canWrite = true; // kühlkennlinie neigung
   if(addr == 0x7111) canWrite = true; // kühlkennlinie steigung
   if(addr == 0x2001) canWrite = true; // raumtemp red soll
@@ -112,9 +117,18 @@ bool writeFromString(int addr, int conversion, String value) {
   if(addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
                                       // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
   if(addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
-  if(addr == 0x7106) canWrite = true; // witterungs / raumtemperaturgeführte kühlung
-  if(addr == 0x7107) canWrite = true; // welcher heizkreis / tempsensor für kühlung
+  // 6000 WW Soll
+  // B020 1x WW bereiten
+  // 600C WW2 Soll
+  // to start: http://192.168.11.30/write?addr=0xB020&len=1&val=true&stat=1
+  if(addr == 0xB020) canWrite = true; // 1x WW bereiten
+  if(addr == 0x6000) canWrite = true; // 1x WW Soll
+  if(addr == 0x600C) canWrite = true; // 1x WW2 Soll
 
+  // http://192.168.11.30/read?addr=0x1A52&conv=cop Ventilator PROZENT
+  // http://192.168.11.30/read?addr=0x1A53&conv=cop Lüfter Prozent
+  // http://192.168.11.30/read?addr=0x1A54&conv=cop Kompressor Prozent
+  // http://192.168.11.30/read?addr=0x1AC3&conv=cop Verdichter Last Prozent
   if((addr & 0xFFF0) == 0x01D0) canWrite = true;
 
   // kühlen langzeitermittlung: 30 min

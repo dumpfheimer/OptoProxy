@@ -1,6 +1,4 @@
-#define USE_3LOGGING
-#define LOGGING_RX 0 // D8
-#define LOGGING_TX 2 // D9  
+#include "logging.h"
 
 #ifdef USE_LOGGING
 #include <SoftwareSerial.h>
@@ -52,7 +50,7 @@ bool useLogging() {
   return true;
 }
 
-SoftwareSerial* getLogger() {
+LOGGING_SERIAL* getLogger() {
   return &loggingSerial;
 }
 #else
@@ -60,7 +58,7 @@ bool useLogging() {
   return false;
 }
 
-SoftwareSerial* getLogger() {
+LOGGING_SERIAL* getLogger() {
   return NULL;
 }
 #endif
