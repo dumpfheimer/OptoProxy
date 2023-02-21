@@ -26,7 +26,7 @@ void setup() {
   #endif
 
   WiFi.setAutoReconnect(true);
-  WiFi.persistent(true);
+  WiFi.persistent(false);
   
   setupHttp();
   ElegantOTA.begin(&server);
