@@ -233,20 +233,21 @@ bool writeFromString(uint16_t addr, int conversion, String value) {
     }
     free(writeValues);
 
-    while (getOptolink()->available() != 0 && millis() - 3000UL < start) {
+    while (getOptolink()->isBusy() && millis() - 3000UL < start) {
         getOptolink()->loop();
-        yield();
-        //Serial.flush();
+        if (getOptolink()->available() > 0) {
+            getOptolink()->read(valueCrap);
+            break;
+        }
+        if (getOptolink()->available() < 0) {
+            getOptolink()->readError();
+            server.send(500, "text/plain", "WRITE_FAILED");
+            return true;
+        }
+        delay(10);
     }
 
-    if (getOptolink()->available() > 0) {
-        getOptolink()->read(valueCrap);
-    }
-    if (getOptolink()->available() < 0) {
-        getOptolink()->readError();
-        server.send(500, "text/plain", "WRITE_FAILED");
-        return true;
-    }
+
 
     if (!getOptolink()->readFromDP(addr, writeLength)) {
         server.send(500, "text/plain", "COULD_NOT_INITIALIZE_READ");
