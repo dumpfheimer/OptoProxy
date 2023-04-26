@@ -28,6 +28,7 @@
 #include <ElegantOTA.h>
 
 #include "wifi-credentials.h"
+#include "wifi.h"
 
 // pin 2->D9
 // pin 0->D8
