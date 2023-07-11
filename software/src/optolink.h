@@ -12,5 +12,6 @@
 
 void readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion);
 String readToString(int addr, uint8_t conversion);
+bool writeFromString(uint16_t addr, int conversion, String value);
 
 #endif //SOFTWARE_OPTOLINK_H
