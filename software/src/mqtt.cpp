@@ -79,7 +79,7 @@ void mqttSetup() {
 MqttDatapoint* getNextDataPoint() {
     MqttDatapoint* ret = &mqttDatapoints[mqttDatapointpointer];
     mqttDatapointpointer++;
-    if (mqttDatapointpointer >= sizeof(ret)) {
+    if (mqttDatapointpointer >= (sizeof(mqttDatapoints) / sizeof(mqttDatapoints[0]))) {
         mqttDatapointpointer = 0;
     }
     return ret;
