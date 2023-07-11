@@ -128,8 +128,9 @@ void MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion);
-    this->compareAndSend(valueBuffer);
+    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion)) {
+        this->compareAndSend(valueBuffer);
+    }
 }
 
 #else

@@ -5,7 +5,7 @@
 
 bool link_locked = false;
 
-void readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8_t conversion) {
+bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8_t conversion) {
     unsigned long timeout = millis() + 15000UL;
     uint8_t len = 2;
     uint8_t valueCrap[16] = {0};
@@ -20,8 +20,8 @@ void readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
     }
 
     if (getOptolink()->isBusy()) {
-        strcpy("LINK_BUSY", buffer);
-        return;
+        strcpy(buffer, "LINK_BUSY");
+        return false;
     }
 
     if (conversion == 1) {
@@ -62,13 +62,13 @@ void readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
             break;
         } else if (getOptolink()->available() < 0) {
             ltoa(getOptolink()->readError(), buffer, 10);
-            return;
+            return false;
         } else {
             getOptolink()->loop();
         }
         if (timeout < millis()) {
-            strcpy("READ_TIMEOUT", buffer);
-            return;
+            strcpy(buffer, "READ_TIMEOUT");
+            return false;
         }
         delay(10);
     }
@@ -97,13 +97,15 @@ void readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
         dpv = DPRaw("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
     }
     dpv.getString(buffer, buffer_length);
+    return true;
 }
 
-void readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion) {
+bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion) {
     while (link_locked) delay(1);
     link_locked = true;
-    readToBufferUnsynchronized(buffer, buffer_length, addr, conversion);
+    bool ret = readToBufferUnsynchronized(buffer, buffer_length, addr, conversion);
     link_locked = false;
+    return ret;
 }
 
 String readToString(int addr, uint8_t conversion) {

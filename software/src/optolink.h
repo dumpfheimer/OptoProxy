@@ -10,7 +10,7 @@
 #include <Datapoint.hpp>
 #include "main.h"
 
-void readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion);
+bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion);
 String readToString(int addr, uint8_t conversion);
 bool writeFromString(uint16_t addr, int conversion, String value);
 
