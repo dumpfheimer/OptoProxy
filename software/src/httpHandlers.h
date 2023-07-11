@@ -10,5 +10,6 @@
 #include <Datapoint.hpp>
 
 #include "main.h"
+#include "optolink.h"
 
 #endif //SOFTWARE_HTTPHANDLERS_H

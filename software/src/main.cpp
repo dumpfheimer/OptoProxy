@@ -1,4 +1,5 @@
 #include "main.h"
+#include "mqtt.h"
 
 #ifdef ESP8266
 ESP8266WebServer server(80);
@@ -40,6 +41,7 @@ void setup() {
     if (useLogging()) {
         optolink.setLogger(getLogger());
     }
+    mqttSetup();
 }
 
 OPTOLINK_CLASS *getOptolink() {
@@ -50,4 +52,5 @@ void loop() {
     loopWifi();
     optolink.loop();
     server.handleClient();
+    mqttLoop();
 }
