@@ -58,8 +58,8 @@ char topicBuffer[MQTT_TOPIC_BUFFER_SIZE];
 char valueBuffer[MQTT_VALUE_BUFFER_SIZE];
 
 void mqttReconnect() {
-    while (!client.connected()) {
-	if (!WiFi.isConnected()) return;
+    if (!client.connected()) {
+	    if (!WiFi.isConnected()) return;
         Serial.print("Reconnecting...");
         if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
             Serial.print("failed, rc=");
@@ -98,6 +98,7 @@ void mqttLoop() {
 MqttDatapoint::MqttDatapoint(int address, uint8_t conversion) {
     this->address = address;
     this->conversion = conversion;
+    this->lastValue[0] = 0;
     int shift = 0;
     this->hexAddress[0] = '0';
     this->hexAddress[1] = '0';

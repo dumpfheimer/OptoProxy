@@ -37,8 +37,8 @@ public:
     void loop();
     int address;
     uint8_t conversion;
-    char lastValue[MQTT_VALUE_BUFFER_SIZE];
-    char hexAddress[6];
+    char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
+    char hexAddress[6]{};
 };
 
 #endif //SOFTWARE_MQTT_H
