@@ -68,4 +68,4 @@ http://<IP_OF_ESP8266>/read?addr=0x2000&conv=temp
 
 Example URL for writing Address 0x2000 (Room Temperature Setpoint)
 
-http://<IP_OF_ESP8266>/read?addr=0x2000&conv=temp&val=21
+http://<IP_OF_ESP8266>/write?addr=0x2000&conv=temp&val=21
