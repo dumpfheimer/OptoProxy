@@ -74,6 +74,7 @@ void mqttReconnect() {
 
 void mqttSetup() {
     client.setServer(MQTT_HOST, 1883);
+    client.setBufferSize(350);
 }
 
 MqttDatapoint* getNextDataPoint() {
@@ -99,6 +100,8 @@ MqttDatapoint::MqttDatapoint(int address, uint8_t conversion) {
     this->address = address;
     this->conversion = conversion;
     this->lastValue[0] = 0;
+    this->sendInterval = 30000;
+    this->lastSend = 0 - this->sendInterval;
     int shift = 0;
     this->hexAddress[0] = '0';
     this->hexAddress[1] = '0';
@@ -115,23 +118,32 @@ MqttDatapoint::MqttDatapoint(int address, uint8_t conversion) {
     ltoa(address, this->hexAddress + shift, 16);
 }
 
-void MqttDatapoint::compareAndSend(char* newValue) {
+bool MqttDatapoint::compareAndSend(char* newValue) {
     if (strcmp(newValue, this->lastValue) != 0) {
-        this->send(newValue);
+        return this->send(newValue);
     }
+    return false;
 }
 
-void MqttDatapoint::send(char* newValue) {
-    strcpy(this->lastValue, newValue);
+bool MqttDatapoint::send(char* newValue) {
     strcpy(topicBuffer, "optoproxy/value/0x");
     strcpy(&topicBuffer[18], this->hexAddress);
-    client.publish(topicBuffer, newValue, true);
+    bool ret = client.publish(topicBuffer, newValue, true);
+    if (ret) {
+        this->lastSend = millis();
+        strcpy(this->lastValue, newValue);
+    }
+    return ret;
 }
 
 void MqttDatapoint::loop() {
     if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion)) {
-        this->compareAndSend(valueBuffer);
+        this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
     }
+}
+
+bool MqttDatapoint::wantsToSend() {
+    return millis() - this->lastSend >= this->sendInterval;
 }
 
 #else

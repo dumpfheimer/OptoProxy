@@ -32,13 +32,16 @@ private:
 
 public:
     MqttDatapoint(int address, uint8_t conversion);
-    void compareAndSend(char* newValue);
-    void send(char* newValue);
+    bool compareAndSend(char* newValue);
+    bool send(char* newValue);
     void loop();
+    bool wantsToSend();
     int address;
     uint8_t conversion;
     char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
     char hexAddress[6]{};
+    unsigned long sendInterval;
+    unsigned long lastSend;
 };
 
 #endif //SOFTWARE_MQTT_H
