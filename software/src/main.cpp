@@ -42,6 +42,7 @@ void setup() {
         optolink.setLogger(getLogger());
     }
     mqttSetup();
+    wifiMgrExpose(&server);
 }
 
 OPTOLINK_CLASS *getOptolink() {
