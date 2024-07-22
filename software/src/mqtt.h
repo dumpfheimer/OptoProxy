@@ -31,13 +31,14 @@ class MqttDatapoint {
 private:
 
 public:
-    MqttDatapoint(int address, uint8_t conversion);
+    MqttDatapoint(int address, uint8_t conversion, uint8_t length);
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
     bool wantsToSend();
     int address;
     uint8_t conversion;
+    uint8_t length;
     char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
     char hexAddress[6]{};
     unsigned long sendInterval;

@@ -12,4 +12,6 @@
 #include "main.h"
 #include "optolink.h"
 
+void loopHttp();
+
 #endif //SOFTWARE_HTTPHANDLERS_H

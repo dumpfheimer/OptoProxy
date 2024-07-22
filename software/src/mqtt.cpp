@@ -19,38 +19,39 @@ PubSubClient client(wifiClient);
     8 cop 1_10_F
     */
 MqttDatapoint mqttDatapoints[] = {
-        MqttDatapoint(0x0101, 1),
-        MqttDatapoint(0x0106, 1),
-        MqttDatapoint(0x0105, 1),
-        MqttDatapoint(0x1800, 1),
-        MqttDatapoint(0x1803, 1),
-        MqttDatapoint(0x010D, 1),
-        MqttDatapoint(0x2006, 1),
-        MqttDatapoint(0x2007, 1),
-        MqttDatapoint(0x7110, 1),
-        MqttDatapoint(0x7111, 1),
-        MqttDatapoint(0x7103, 1),
+        MqttDatapoint(0x0101, 1, 0),
+        MqttDatapoint(0x0106, 1, 0),
+        MqttDatapoint(0x0105, 1, 0),
+        MqttDatapoint(0x0847, 0, 1),
+        MqttDatapoint(0x1800, 1, 0),
+        MqttDatapoint(0x1803, 1, 0),
+        MqttDatapoint(0x010D, 1, 0),
+        MqttDatapoint(0x2006, 1, 0),
+        MqttDatapoint(0x2007, 1, 0),
+        MqttDatapoint(0x7110, 1, 0),
+        MqttDatapoint(0x7111, 1, 0),
+        MqttDatapoint(0x7103, 1, 0),
 
-        MqttDatapoint(0x2000, 1),
-        MqttDatapoint(0x2001, 1),
-        MqttDatapoint(0x0116, 1),
+        MqttDatapoint(0x2000, 1, 0),
+        MqttDatapoint(0x2001, 1, 0),
+        MqttDatapoint(0x0116, 1, 0),
 
-        MqttDatapoint(0xb000, 6),
-        MqttDatapoint(0x0494, 3),
-        MqttDatapoint(0x048d, 3),
-        MqttDatapoint(0x0480, 3),
-        MqttDatapoint(0x04a6, 3),
-        MqttDatapoint(0x2005, 6),
+        MqttDatapoint(0xb000, 6, 0),
+        MqttDatapoint(0x0494, 3, 0),
+        MqttDatapoint(0x048d, 3, 0),
+        MqttDatapoint(0x0480, 3, 0),
+        MqttDatapoint(0x04a6, 3, 0),
+        MqttDatapoint(0x2005, 6, 0),
 
-        MqttDatapoint(0xB020, 6),
-        MqttDatapoint(0x6000, 1),
-        MqttDatapoint(0x600C, 1),
+        MqttDatapoint(0xB020, 6, 0),
+        MqttDatapoint(0x6000, 1, 0),
+        MqttDatapoint(0x600C, 1, 0),
 
-        MqttDatapoint(0xB420, 5),
-        MqttDatapoint(0xB421, 5),
-        MqttDatapoint(0xB422, 5),
-        MqttDatapoint(0xB423, 5),
-        MqttDatapoint(0xB424, 5),
+        MqttDatapoint(0xB420, 5, 0),
+        MqttDatapoint(0xB421, 5, 0),
+        MqttDatapoint(0xB422, 5, 0),
+        MqttDatapoint(0xB423, 5, 0),
+        MqttDatapoint(0xB424, 5, 0),
 };
 uint16_t mqttDatapointpointer = 0;
 
@@ -90,15 +91,18 @@ void mqttLoop() {
     if (!client.connected()) {
         mqttReconnect();
     }
-    client.loop();
+    if (client.connected()) {
+        client.loop();
 
-    MqttDatapoint* nextDatapoint = getNextDataPoint();
-    nextDatapoint->loop();
+        MqttDatapoint *nextDatapoint = getNextDataPoint();
+        nextDatapoint->loop();
+    }
 }
 
-MqttDatapoint::MqttDatapoint(int address, uint8_t conversion) {
+MqttDatapoint::MqttDatapoint(int address, uint8_t conversion, uint8_t length) {
     this->address = address;
     this->conversion = conversion;
+    this->length = length;
     this->lastValue[0] = 0;
     this->sendInterval = 30000;
     this->lastSend = 0 - this->sendInterval;
@@ -137,7 +141,7 @@ bool MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion)) {
+    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion, this->length)) {
         this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
     }
 }

@@ -54,4 +54,5 @@ void loop() {
     optolink.loop();
     server.handleClient();
     mqttLoop();
+    loopHttp();
 }

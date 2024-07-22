@@ -3,12 +3,13 @@
 //
 #include "optolink.h"
 
+#include <utility>
+
 bool link_locked = false;
 
-bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8_t conversion) {
-    unsigned long timeout = millis() + 15000UL;
-    uint8_t len = 2;
-    uint8_t valueCrap[16] = {0};
+bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8_t conversion, uint8_t length) {
+    unsigned long start = millis();
+    uint8_t valueCrap[17] = {0};
 
     if (getOptolink()->available() < 0) {
         println(getOptolink()->readError());
@@ -24,28 +25,36 @@ bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
         return false;
     }
 
-    if (conversion == 1) {
-        len = 4;
-    } else if (conversion == 2) {
-        len = 1;
-    } else if (conversion == 3) {
-        len = 1;
-    } else if (conversion == 4) {
-        len = 4;
-    } else if (conversion == 5) {
+    uint8_t len;
+    if (length == 0) {
         len = 2;
-    } else if (conversion == 6) {
-        len = 1;
-    } else if (conversion == 7) {
-        len = 4;
-    } else if (conversion == 8) {
-        len = 2;
+        if (conversion == 1) {
+            len = 4;
+        } else if (conversion == 2) {
+            len = 1;
+        } else if (conversion == 3) {
+            len = 1;
+        } else if (conversion == 4) {
+            len = 4;
+        } else if (conversion == 5) {
+            len = 2;
+        } else if (conversion == 6) {
+            len = 1;
+        } else if (conversion == 7) {
+            len = 4;
+        } else if (conversion == 8) {
+            len = 2;
+        }
+
+        if (len > 4) len = 4;
+        if (len < 1) len = 1;
+    } else {
+        len = length;
+        if (len > 8) len = 8;
+        if (len < 1) len = 1;
     }
 
-    if (len > 4) len = 4;
-    if (len < 1) len = 1;
-
-    uint8_t value[16] = {0};
+    uint8_t value[17] = {0};
 
     getOptolink()->readFromDP(addr, len);
 
@@ -66,7 +75,7 @@ bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
         } else {
             getOptolink()->loop();
         }
-        if (timeout < millis()) {
+        if ((millis() - start) > 5000UL) {
             strcpy(buffer, "READ_TIMEOUT");
             return false;
         }
@@ -100,18 +109,26 @@ bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
     return true;
 }
 
-bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion) {
+bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion, uint8_t length) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = readToBufferUnsynchronized(buffer, buffer_length, addr, conversion);
+    bool ret = readToBufferUnsynchronized(buffer, buffer_length, addr, conversion, length);
     link_locked = false;
     return ret;
 }
 
-String readToString(int addr, uint8_t conversion) {
+bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion) {
+    return readToBuffer(buffer, buffer_length, addr, conversion, 0);
+}
+
+String readToString(int addr, uint8_t conversion, uint8_t length) {
     char buffer[25];
-    readToBuffer(buffer, 25, addr, conversion);
+    readToBuffer(buffer, 25, addr, conversion, length);
     return buffer;
+}
+
+String readToString(int addr, uint8_t conversion) {
+    return readToString(addr, conversion, 0);
 }
 
 
@@ -139,6 +156,7 @@ bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) 
     if (addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
     if (addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
+    if (addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll
@@ -313,7 +331,7 @@ bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) 
 bool writeFromString(uint16_t addr, int conversion, String value) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = writeFromStringUnsynchronized(addr, conversion, value);
+    bool ret = writeFromStringUnsynchronized(addr, conversion, std::move(value));
     link_locked = false;
     return ret;
 }

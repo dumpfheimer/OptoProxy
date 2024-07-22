@@ -7,6 +7,7 @@ void handleRoot() {
 
 void handleRead() {
     uint16_t addr = 0;
+    uint16_t len = 0;
     int conv = 0;
 
     for (uint8_t i = 0; i < server.args(); i++) {
@@ -18,7 +19,7 @@ void handleRead() {
             } else if (server.arg(i) == "temp") {
                 // conv4_1_UL 4
                 conv = 1;
-            } else if (server.arg(i) == "temps") {
+            } else if (server.arg(i) == "temps" || server.arg(i) == "percent") {
                 // conv1_1_US 1
                 conv = 2;
             } else if (server.arg(i) == "stat") {
@@ -44,12 +45,14 @@ void handleRead() {
             }
         }
     }
+    if (server.hasArg("len")) len = server.arg("len").toInt();
+    if (server.hasArg("length")) len = server.arg("length").toInt();
 
     if (!getOptolink()->connected()) {
         server.send(500, "text/plain", "NOT_CONNECTED");
     }
 
-    String ret = readToString(addr, conv);
+    String ret = readToString(addr, conv, len);
     server.send(200, "text/plain", ret);
 }
 
@@ -75,7 +78,7 @@ void handleWrite() {
     } else if (server.arg("conv") == "temp") {
         // conv4_1_UL 4
         conv = 1;
-    } else if (server.arg("conv") == "temps") {
+    } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
         // conv1_1_US 1
         conv = 2;
     } else if (server.arg("conv") == "stat") {
@@ -161,6 +164,52 @@ void handleVentilHeizenWW() {
     server.send(200, "text/plain", ret);
 }
 
+#define MAX_TIMER_GPIO 20
+unsigned long timer_start[MAX_TIMER_GPIO] = {0};
+unsigned long timer_duration[MAX_TIMER_GPIO] = {0};
+uint8_t timer_value[MAX_TIMER_GPIO] = {0};
+
+void handleGpioWrite() {
+    if (!server.hasArg("pin")) {
+        server.send(400, "text/plain", "pin missing");
+        return;
+    }
+    if (!server.hasArg("val")) {
+        server.send(400, "text/plain", "pin missing");
+        return;
+    }
+    int pin = server.arg("pin").toInt();
+    int val = server.arg("val").toInt();
+
+    if (server.hasArg("timer")) {
+        if (pin < MAX_TIMER_GPIO) {
+            unsigned long time = server.arg("timer").toInt();
+            timer_start[pin] = millis();
+            timer_duration[pin] = time;
+            timer_value[pin] = val == 0 ? 1 : 0;
+        } else {
+            server.send(400, "text/plain", "gpio out of reach for timer");
+        }
+    }
+
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, val);
+
+    server.send(200, "ok");
+}
+
+void loopHttp() {
+    for (uint8_t i = 0; i < MAX_TIMER_GPIO; i++) {
+        unsigned long t = millis();
+        if (timer_start[i] != 0) {
+            if ((t - timer_start[i]) >= timer_duration[i]) {
+                digitalWrite(i, timer_value[i]);
+                timer_start[i] = 0;
+            }
+        }
+    }
+}
+
 void setupHttp() {
     server.on("/", handleRoot);
     server.on("/read", handleRead);
@@ -171,6 +220,7 @@ void setupHttp() {
     server.on("/vorlaufT", handleVorlaufT);
     server.on("/vorlaufTsoll", handleVorlaufTsoll);
     server.on("/ventilHeizenWW", handleVentilHeizenWW);
+    server.on("/gpio/write", handleGpioWrite);
 
     server.begin();
 }
