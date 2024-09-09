@@ -157,6 +157,7 @@ bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) 
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
     if (addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
     if (addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
+    if (addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll
