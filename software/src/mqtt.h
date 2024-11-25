@@ -35,7 +35,7 @@ public:
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
-    bool wantsToSend();
+    bool wantsToSend() const;
     int address;
     uint8_t conversion;
     uint8_t length;

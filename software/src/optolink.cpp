@@ -70,7 +70,12 @@ bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8
             }*/
             break;
         } else if (getOptolink()->available() < 0) {
-            ltoa(getOptolink()->readError(), buffer, 10);
+            buffer[0] = 'E';
+            buffer[1] = 'R';
+            buffer[2] = 'R';
+            buffer[3] = '0';
+            buffer[4] = 'R';
+            ltoa(getOptolink()->readError(), buffer + 5, 10);
             return false;
         } else {
             getOptolink()->loop();
@@ -121,9 +126,14 @@ bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion)
     return readToBuffer(buffer, buffer_length, addr, conversion, 0);
 }
 
+bool readToStringLock = false;
 String readToString(int addr, uint8_t conversion, uint8_t length) {
+    // lock to prevent buffer from being used simultaneously
+    while (readToStringLock) delay(1);
+    readToStringLock = true;
     char buffer[25];
     readToBuffer(buffer, 25, addr, conversion, length);
+    readToStringLock = false;
     return buffer;
 }
 
@@ -149,14 +159,19 @@ bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) 
     if (addr == 0x2001) canWrite = true; // raumtemp red soll
     if (addr == 0x2003) canWrite = true; // use remote control
     if (addr == 0x2000) canWrite = true; // raumtep soll
+    if (addr == 0x2005) canWrite = true; // ramtemperaturregelung
     if (addr == 0x2006) canWrite = true; // heizkennlinie niveau
     if (addr == 0x2007) canWrite = true; // heizkennlinie steigung
+    if (addr == 0x200A) canWrite = true; // Einfluss Raumtemperaturaufschaltung
+    if (addr == 0x2034) canWrite = true; // Einfluss Raumtemperaturaufschaltung kühlen
     if (addr == 0xb000) canWrite = true; // betriebsmodus
     if (addr == 0x7002) canWrite = true; // temerpatur mittel langzeitermittlung min (counts)
     if (addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
     if (addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
     if (addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
+    if (addr == 0x7414) canWrite = true; // Startleistung
+    if (addr == 0x5006) canWrite = true; // Min. Pausenzeit Verdichter
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll

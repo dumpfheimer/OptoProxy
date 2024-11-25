@@ -7,6 +7,8 @@
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
+unsigned long lastConnect = 0 - 5000;
+
 /*
     0 raw ?
     1 temp 2_10_UL
@@ -55,20 +57,22 @@ MqttDatapoint mqttDatapoints[] = {
 };
 uint16_t mqttDatapointpointer = 0;
 
-char topicBuffer[MQTT_TOPIC_BUFFER_SIZE];
-char valueBuffer[MQTT_VALUE_BUFFER_SIZE];
+char *topicBuffer = new char[MQTT_TOPIC_BUFFER_SIZE];
+char *valueBuffer = new char[MQTT_VALUE_BUFFER_SIZE];
 
 void mqttReconnect() {
     if (!client.connected()) {
-	    if (!WiFi.isConnected()) return;
-        Serial.print("Reconnecting...");
-        if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
-            Serial.print("failed, rc=");
-            Serial.print(client.state());
-            Serial.println(" retrying in 5 seconds");
-            delay(5000);
-        } else {
-            Serial.print("success");
+        if (!WiFi.isConnected()) return;
+        if (millis() - lastConnect > 5000) {
+            Serial.print("Reconnecting...");
+            if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
+                Serial.print("failed, rc=");
+                Serial.print(client.state());
+                Serial.println(" retrying in 5 seconds");
+            } else {
+                Serial.print("success");
+            }
+            lastConnect = millis();
         }
     }
 }
@@ -128,8 +132,10 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
     }
     return false;
 }
-
+bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
+    while (mqttLock) delay(1);
+    mqttLock = true;
     strcpy(topicBuffer, "optoproxy/value/0x");
     strcpy(&topicBuffer[18], this->hexAddress);
     bool ret = client.publish(topicBuffer, newValue, true);
@@ -137,6 +143,7 @@ bool MqttDatapoint::send(char* newValue) {
         this->lastSend = millis();
         strcpy(this->lastValue, newValue);
     }
+    mqttLock = false;
     return ret;
 }
 
@@ -146,7 +153,7 @@ void MqttDatapoint::loop() {
     }
 }
 
-bool MqttDatapoint::wantsToSend() {
+bool MqttDatapoint::wantsToSend() const {
     return millis() - this->lastSend >= this->sendInterval;
 }
 

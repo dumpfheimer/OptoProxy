@@ -6,54 +6,69 @@ void handleRoot() {
 }
 
 void handleRead() {
-    uint16_t addr = 0;
-    uint16_t len = 0;
-    int conv = 0;
-
-    for (uint8_t i = 0; i < server.args(); i++) {
-        if (server.argName(i) == "addr") {
-            addr = strtoul(server.arg(i).c_str(), NULL, 16);
-        } else if (server.argName(i) == "conv") {
-            if (server.arg(i) == "raw") {
-                conv = 0;
-            } else if (server.arg(i) == "temp") {
-                // conv4_1_UL 4
-                conv = 1;
-            } else if (server.arg(i) == "temps" || server.arg(i) == "percent") {
-                // conv1_1_US 1
-                conv = 2;
-            } else if (server.arg(i) == "stat") {
-                // conv1_1_B 1
-                conv = 3;
-            } else if (server.arg(i) == "count") {
-                // conv4_1_UL 4
-                conv = 4;
-            } else if (server.arg(i) == "counts") {
-                // conv2_1_UL 2
-                conv = 5;
-            } else if (server.arg(i) == "mode") {
-                // conv1_1_US 1
-                conv = 6;
-            } else if (server.arg(i) == "hours") {
-                // conv4_3600_F 4
-                conv = 7;
-            } else if (server.arg(i) == "cop") {
-                // conv1_10_F 2
-                conv = 8;
-            } else {
-                conv = server.arg(i).toInt();
-            }
-        }
+    if (!server.hasArg("addr")) {
+        server.send(400, "text/plain", "addr missing");
+        return;
     }
+    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
+    uint16_t len = 0;
     if (server.hasArg("len")) len = server.arg("len").toInt();
     if (server.hasArg("length")) len = server.arg("length").toInt();
 
-    if (!getOptolink()->connected()) {
-        server.send(500, "text/plain", "NOT_CONNECTED");
+    int conv = 0;
+    if (server.hasArg("conv")) {
+        if (server.arg("conv") == "raw") {
+            conv = 0;
+        } else if (server.arg("conv") == "temp") {
+            // conv4_1_UL 4
+            conv = 1;
+        } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
+            // conv1_1_US 1
+            conv = 2;
+        } else if (server.arg("conv") == "stat") {
+            // conv1_1_B 1
+            conv = 3;
+        } else if (server.arg("conv") == "count") {
+            // conv4_1_UL 4
+            conv = 4;
+        } else if (server.arg("conv") == "counts") {
+            // conv2_1_UL 2
+            conv = 5;
+        } else if (server.arg("conv") == "mode") {
+            // conv1_1_US 1
+            conv = 6;
+        } else if (server.arg("conv") == "hours") {
+            // conv4_3600_F 4
+            conv = 7;
+        } else if (server.arg("conv") == "cop") {
+            // conv1_10_F 2
+            conv = 8;
+        } else {
+            conv = server.arg("conv").toInt();
+        }
     }
 
-    String ret = readToString(addr, conv, len);
-    server.send(200, "text/plain", ret);
+    if (server.hasArg("debug")) {
+        server.send(200, "text/plain", String(addr) + ":" + String(conv) + ":" + String(len));
+        return;
+    }
+
+    if (!getOptolink()->connected()) {
+        server.send(500, "text/plain", "NOT_CONNECTED");
+        return;
+    }
+
+    char *buff = (char*) malloc(sizeof(char) * 25);
+    if (buff == nullptr) {
+        server.send(500, "text/plain" "OUT_OF_MEMORY");
+    } else {
+        if (readToBuffer(buff, 25, addr, conv, len)) {
+            server.send(200, "text/plain", buff);
+        } else {
+            server.send(500, "text/plain", buff);
+        }
+        free(buff);
+    }
 }
 
 void handleWrite() {
