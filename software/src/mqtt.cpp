@@ -71,15 +71,73 @@ void mqttReconnect() {
                 Serial.println(" retrying in 5 seconds");
             } else {
                 Serial.print("success");
+                client.subscribe("optoproxy/request");
             }
             lastConnect = millis();
         }
     }
 }
 
+void onMqttMessage(char *topic, byte *payload, unsigned int length) {
+    if (length > 31) return;
+    int i;
+    for (i = 0; i < length; i++) valueBuffer[i] = (char) payload[i];
+    valueBuffer[i] = '\0';
+    char *part = strtok(valueBuffer, ":");
+    i = 0;
+
+    if (strcmp(topic, "optoproxy/request") == 0) {
+        uint16_t addr = 0;
+        uint8_t len = 0;
+        uint8_t conv = 0;
+
+        while (part != nullptr) {
+            if (i == 0) {
+                // addr
+                addr = strtoul(part, nullptr, 16);
+            } else if (i == 1) {
+                // conv
+                if (strcmp(part, "raw") == 0) {
+                    conv = 0;
+                } else if (strcmp(part, "temp") == 0) {
+                    conv = 1;
+                } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
+                    conv = 2;
+                } else if (strcmp(part, "stat") == 0) {
+                    conv = 3;
+                } else if (strcmp(part, "count") == 0) {
+                    conv = 4;
+                } else if (strcmp(part, "counts") == 0) {
+                    conv = 5;
+                } else if (strcmp(part, "mode") == 0) {
+                    conv = 6;
+                } else if (strcmp(part, "hours") == 0) {
+                    conv = 7;
+                } else if (strcmp(part, "cop") == 0) {
+                    conv = 8;
+                } else {
+                    conv = strtoul(part, nullptr, 10);
+                }
+            } else if (i == 2) {
+                // len
+                len = strtoul(part, nullptr, 10);
+            }
+            part = strtok(nullptr, ":"); // Extract the next token
+            i++;
+        }
+
+        readToBuffer(valueBuffer, 32, addr, conv);
+
+        strcpy(topicBuffer, "optoproxy/value/0x");
+        sprintf(&topicBuffer[18], "%04X", addr);
+        client.publish(topicBuffer, valueBuffer, false);
+    }
+}
+
 void mqttSetup() {
     client.setServer(MQTT_HOST, 1883);
     client.setBufferSize(350);
+    client.setCallback(onMqttMessage);
 }
 
 MqttDatapoint* getNextDataPoint() {
