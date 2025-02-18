@@ -28,7 +28,7 @@
 #include <ElegantOTA.h>
 
 #include "wifi-credentials.h"
-#include "wifi.h"
+#include "wifi_mgr.h"
 
 #ifdef ESP8266
 
