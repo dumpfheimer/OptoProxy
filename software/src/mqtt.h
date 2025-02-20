@@ -5,20 +5,10 @@
 #ifndef SOFTWARE_MQTT_H
 #define SOFTWARE_MQTT_H
 
-#include "wifi-credentials.h"
-
-#ifdef MQTT_HOST
-
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
 #include <PubSubClient.h>
 
+#include "configuration.h"
 #include "main.h"
-
-#endif //ifdef MQTT_HOST
-
 #include "optolink.h"
 
 #define MQTT_TOPIC_BUFFER_SIZE 32
@@ -31,13 +21,13 @@ class MqttDatapoint {
 private:
 
 public:
-    MqttDatapoint(int address, uint8_t conversion, uint8_t length);
+    MqttDatapoint(int address, VitoWiFi::Converter *converter, uint8_t length);
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
     bool wantsToSend() const;
     int address;
-    uint8_t conversion;
+    VitoWiFi::Converter *converter;
     uint8_t length;
     char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
     char hexAddress[6]{};
