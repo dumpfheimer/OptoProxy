@@ -3,115 +3,84 @@
 //
 #include "optolink.h"
 
-#include <utility>
-
 bool link_locked = false;
+uint8_t crc = 0;
 
-const VitoWiFi::PacketVS2* result = nullptr;
-VitoWiFi::OptolinkResult error = VitoWiFi::OptolinkResult::TIMEOUT;
-bool hasResult = false;
-bool hasError = false;
-
-void onResponse(const VitoWiFi::PacketVS2& response, const VitoWiFi::Datapoint& request) {
-    result = &response;
-    hasResult = true;
-}
-
-void onError(VitoWiFi::OptolinkResult error_, const VitoWiFi::Datapoint& request) {
-    error = error_;
-    hasError = true;
-}
-
-void resetForCommunication() {
-    getOptolink()->onError(onError);
-    getOptolink()->onResponse(onResponse);
-    result = nullptr;
-    hasResult = false;
-    hasError = false;
-}
-
-bool readToBufferUnsynchronized(char* buffer, VitoWiFi::Datapoint datapoint) {
+bool readToBufferUnsynchronized(char* buffer, float *val, uint16_t addr, uint8_t expectBytes, uint16_t factor) {
     unsigned long start = millis();
 
-    resetForCommunication();
+    while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
 
-    if (!getOptolink()->read(datapoint)) {
-        strcpy(buffer, "SEND_ERROR");
-        return false;
-    }
+    OPTOLINK_SERIAL.write(0x41);
+    OPTOLINK_SERIAL.write(0x05);
+    crc = 0x05;
+    OPTOLINK_SERIAL.write(0x00); crc = crc + 0x00;
+    OPTOLINK_SERIAL.write(0x01); crc = crc + 0x01;
+    OPTOLINK_SERIAL.write(addr >> 8); crc = crc + (addr >> 8);
+    OPTOLINK_SERIAL.write(addr & 0xFF); crc = crc + (addr & 0xFF);
+    OPTOLINK_SERIAL.write(0x02); crc = crc + 0x02;
+    OPTOLINK_SERIAL.write(crc);
 
     while (true) {
-        getOptolink()->loop();
-        if (hasResult || hasError) break;
+        if (OPTOLINK_SERIAL.available()) break;
         if ((millis() - start) > 5000UL) {
             strcpy(buffer, "READ_TIMEOUT");
             return false;
         }
-        delay(10);
     }
-    if (hasResult) {
-        float val = datapoint.decode(*result);
-        sprintf(buffer, "%.2f", val);
-        return true;
-    } else if (hasError) {
-        if (error == VitoWiFi::OptolinkResult::TIMEOUT) {
-            strcpy(buffer, "timeout");
-        } else if (error == VitoWiFi::OptolinkResult::LENGTH) {
-            strcpy(buffer, "length_error");
-        } else if (error == VitoWiFi::OptolinkResult::NACK) {
-            strcpy(buffer, "NACK");
-        } else if (error == VitoWiFi::OptolinkResult::CRC) {
-            strcpy(buffer, "CRC");
-        } else if (error == VitoWiFi::OptolinkResult::ERROR) {
-            strcpy(buffer, "ERROR");
-        } else if (error == VitoWiFi::OptolinkResult::CONTINUE) {
-            strcpy(buffer, "CONTINUE");
-        } else if (error == VitoWiFi::OptolinkResult::PACKET) {
-            strcpy(buffer, "PACKET");
-        } else {
-            strcpy(buffer, "UNKNOWN_ERROR");
+    uint8_t serialBuffer[30] = {0};
+    uint8_t len = 99;
+    for (int i = 0; i < 30 && i < len + 5; i++) {
+        OPTOLINK_SERIAL.read(&serialBuffer[i], 1);
+        if (i == 3) len = serialBuffer[i];
+    }
+    if (serialBuffer[0] == 0x06 && serialBuffer[1] == 0x41) {
+        crc = 0;
+        for (int i = 0; i < len; i++) {
+            crc += serialBuffer[i+2];
         }
-        return false;
+        if (crc != serialBuffer[len + 4]) {
+            strcpy(buffer, "CRC_MISMATCH");
+            return false;
+        }
+        if (serialBuffer[3] == 0x01 && serialBuffer[4] == 0x01) {
+            // answer to the read request
+            uint16_t answerAddr = serialBuffer[5] << 8 | serialBuffer[6];
+            if (answerAddr == addr) {
+                // same address
+                uint8_t len = serialBuffer[8];
+                uint32_t data = 0;
+                for (int i = 0; i < len; i++) {
+                    data = data | serialBuffer[9+i];
+                    if (i + 1 < len) data = data << 8;
+                }
+                float f = data;
+                sprintf(buffer, "%.2f", f);
+                return true;
+            } else {
+                strcpy(buffer, "ADDR_MISMATCH");
+                return false;
+            }
+        } else {
+            strcpy(buffer, "NOT_01_01");
+            return false;
+        }
     } else {
-        strcpy(buffer, "no_result");
+        sprintf(buffer, "NOT_06_41 %02X %02X", serialBuffer[0], serialBuffer[1]);
         return false;
     }
 }
 
-bool readToBuffer(char* buffer, VitoWiFi::Datapoint datapoint) {
+bool readToBuffer(char* buffer, float *val, uint16_t addr, uint8_t expectBytes, uint16_t factor) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = readToBufferUnsynchronized(buffer, datapoint);
+    bool ret = readToBufferUnsynchronized(buffer, val,addr, expectBytes, factor);
     link_locked = false;
     return ret;
 }
-bool readToBuffer(char* buffer, uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
-    VitoWiFi::Datapoint datapoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
-    return readToBuffer(buffer, datapoint);
-}
 
-bool readToStringLock = false;
-String readToString(VitoWiFi::Datapoint datapoint) {
-    // lock to prevent buffer from being used simultaneously
-    while (readToStringLock) delay(1);
-    readToStringLock = true;
-    char buffer[25];
-    readToBuffer(buffer, datapoint);
-    readToStringLock = false;
-    return buffer;
-}
-
-String readToString(uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
-    VitoWiFi::Datapoint readDatatpoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
-    return readToString(readDatatpoint);
-}
-bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
-    unsigned long start = millis();
-
-    resetForCommunication();
-
+bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t addr, uint8_t expectBytes, uint16_t factor) {
     bool canWrite = false;
-    uint16_t addr = datapoint.address();
     if (addr == 0x7100) canWrite = true; // kühlart
     if (addr == 0x7101) canWrite = true; // heizkreis
     if (addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
@@ -157,44 +126,17 @@ bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value, 
     // heizen langzeitermittlung: 180min
 
     if (!canWrite) {
-        if (readTo != nullptr) strcpy(readTo, "INVALID_ADDRESS");
-        return true;
-    }
-
-    String ret = "";
-
-    if (!getOptolink()->write(datapoint, value.c_str())) {
-        if (readTo != nullptr) strcpy(readTo, "FAILED_TO_SEND");
+        if (buffer != nullptr) strcpy(buffer, "INVALID_ADDRESS");
         return false;
     }
 
-    while (millis() - 3000UL < start) {
-        getOptolink()->loop();
-        if (hasError || hasResult) break;
-        delay(10);
-    }
-    if (!hasResult) {
-        if (readTo != nullptr) strcpy(readTo, "TIMEOUT");
-        return false;
-    }
-
-    if (readTo != nullptr) {
-        return readToBufferUnsynchronized(readTo, datapoint);
-    } else {
-        return true;
-    }
-}
-bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value) {
-    return writeFromStringUnsynchronized(datapoint, value, nullptr);
+    return false;
 }
 
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
+bool writeFromString(const String& value, char* buffer, uint16_t addr, uint8_t expectBytes, uint16_t factor) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = writeFromStringUnsynchronized(datapoint, std::move(value), readTo);
+    bool ret = writeFromStringUnsynchronized(value, buffer, addr, expectBytes, factor);
     link_locked = false;
     return ret;
-}
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value) {
-    return writeFromString(datapoint, value, nullptr);
 }

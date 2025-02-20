@@ -6,14 +6,9 @@
 #define SOFTWARE_OPTOLINK_H
 
 #include <Arduino.h>
-#include "Datapoint/Datapoint.h"
 #include "main.h"
 
-bool readToBuffer(char* buffer, VitoWiFi::Datapoint datapoint);
-bool readToBuffer(char* buffer, uint16_t addr, uint8_t len, VitoWiFi::Converter *converter);
-String readToString(VitoWiFi::Datapoint datapoint);
-String readToString(uint16_t addr, uint8_t len, VitoWiFi::Converter *converter);
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value);
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value, char* readTo);
+bool readToBuffer(char* buffer, float *val, uint16_t addr, uint8_t expectBytes, uint16_t factor);
+bool writeFromString(const String& value, char* buffer, uint16_t addr, uint8_t expectBytes, uint16_t factor);
 
 #endif //SOFTWARE_OPTOLINK_H

@@ -21,13 +21,13 @@ class MqttDatapoint {
 private:
 
 public:
-    MqttDatapoint(int address, VitoWiFi::Converter *converter, uint8_t length);
+    MqttDatapoint(int address, uint16_t factor, uint8_t length);
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
     bool wantsToSend() const;
     int address;
-    VitoWiFi::Converter *converter;
+    uint16_t factor;
     uint8_t length;
     char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
     char hexAddress[6]{};

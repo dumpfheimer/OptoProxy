@@ -10,12 +10,11 @@
 
 // We are using a WEMOS D1
 
-#include <VS2/VS2.h>
 #include <ElegantOTA.h>
-#include "VitoWiFi.h"
 
 #include "configuration.h"
 #include "wifi_mgr.h"
+#include "SoftwareSerial.h"
 
 #ifdef ESP8266
 // CONFIGURATION FOR ESP8266
@@ -37,7 +36,6 @@
 #define OPTOLINK_CLASS VitoWiFi::VitoWiFi<VitoWiFi::VS2>
 
 extern XWebServer server;
-OPTOLINK_CLASS* getOptolink();
 Stream *getOptolinkSerial();
 
 #include "httpHandlers.h"
