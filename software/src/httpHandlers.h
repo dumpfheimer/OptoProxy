@@ -6,12 +6,12 @@
 #define SOFTWARE_HTTPHANDLERS_H
 
 #include <Arduino.h>
-#include <DPValue.hpp>
-#include <Datapoint.hpp>
+#include "Datapoint/Datapoint.h"
 
 #include "main.h"
 #include "optolink.h"
 
+void setupHttp();
 void loopHttp();
 
 #endif //SOFTWARE_HTTPHANDLERS_H

@@ -3,8 +3,6 @@
 //
 #include "mqtt.h"
 
-#ifdef MQTT_HOST
-
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 unsigned long lastConnect = 0 - 5000;
@@ -21,39 +19,39 @@ unsigned long lastConnect = 0 - 5000;
     8 cop 1_10_F
     */
 MqttDatapoint mqttDatapoints[] = {
-        MqttDatapoint(0x0101, 1, 0),
-        MqttDatapoint(0x0106, 1, 0),
-        MqttDatapoint(0x0105, 1, 0),
-        MqttDatapoint(0x0847, 0, 1),
-        MqttDatapoint(0x1800, 1, 0),
-        MqttDatapoint(0x1803, 1, 0),
-        MqttDatapoint(0x010D, 1, 0),
-        MqttDatapoint(0x2006, 1, 0),
-        MqttDatapoint(0x2007, 1, 0),
-        MqttDatapoint(0x7110, 1, 0),
-        MqttDatapoint(0x7111, 1, 0),
-        MqttDatapoint(0x7103, 1, 0),
+        MqttDatapoint(0x0101, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x0106, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x0105, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x0847, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x1800, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x1803, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x010D, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x2006, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x2007, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x7110, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x7111, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x7103, &VitoWiFi::div10, 2),
 
-        MqttDatapoint(0x2000, 1, 0),
-        MqttDatapoint(0x2001, 1, 0),
-        MqttDatapoint(0x0116, 1, 0),
+        MqttDatapoint(0x2000, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x2001, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x0116, &VitoWiFi::div10, 2),
 
-        MqttDatapoint(0xb000, 6, 0),
-        MqttDatapoint(0x0494, 3, 0),
-        MqttDatapoint(0x048d, 3, 0),
-        MqttDatapoint(0x0480, 3, 0),
-        MqttDatapoint(0x04a6, 3, 0),
-        MqttDatapoint(0x2005, 6, 0),
+        MqttDatapoint(0xb000, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x0494, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x048d, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x0480, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x04a6, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x2005, &VitoWiFi::noconv, 1),
 
-        MqttDatapoint(0xB020, 6, 0),
-        MqttDatapoint(0x6000, 1, 0),
-        MqttDatapoint(0x600C, 1, 0),
+        MqttDatapoint(0xB020, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0x6000, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x600C, &VitoWiFi::div10, 2),
 
-        MqttDatapoint(0xB420, 5, 0),
-        MqttDatapoint(0xB421, 5, 0),
-        MqttDatapoint(0xB422, 5, 0),
-        MqttDatapoint(0xB423, 5, 0),
-        MqttDatapoint(0xB424, 5, 0),
+        MqttDatapoint(0xB420, &VitoWiFi::noconv, 2),
+        MqttDatapoint(0xB421, &VitoWiFi::noconv, 2),
+        MqttDatapoint(0xB422, &VitoWiFi::noconv, 2),
+        MqttDatapoint(0xB423, &VitoWiFi::noconv, 2),
+        MqttDatapoint(0xB424, &VitoWiFi::noconv, 2),
 };
 uint16_t mqttDatapointpointer = 0;
 
@@ -65,6 +63,14 @@ void mqttReconnect() {
         if (!WiFi.isConnected()) return;
         if (millis() - lastConnect > 5000) {
             Serial.print("Reconnecting...");
+#ifndef MQTT_USER
+            const char* MQTT_USER = wifiMgrGetConfig("MQTT_USER");
+            if (MQTT_USER == nullptr) return;
+#endif
+#ifndef MQTT_PASS
+            const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");
+            if (MQTT_PASS == nullptr) return;
+#endif
             if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
                 Serial.print("failed, rc=");
                 Serial.print(client.state());
@@ -89,8 +95,8 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     if (strcmp(topic, "optoproxy/request") == 0) {
         uint16_t addr = 0;
         uint8_t len = 0;
-        uint8_t conv = 0;
 
+        VitoWiFi::Converter *converter = nullptr;
         while (part != nullptr) {
             if (i == 0) {
                 // addr
@@ -98,25 +104,35 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             } else if (i == 1) {
                 // conv
                 if (strcmp(part, "raw") == 0) {
-                    conv = 0;
+                    converter = &VitoWiFi::noconv;
+                    len = 4;
                 } else if (strcmp(part, "temp") == 0) {
-                    conv = 1;
+                    converter = &VitoWiFi::div10;
+                    len = 2;
                 } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
-                    conv = 2;
+                    converter = &VitoWiFi::noconv;
+                    len = 2;
                 } else if (strcmp(part, "stat") == 0) {
-                    conv = 3;
+                    converter = &VitoWiFi::noconv;
+                    len = 1;
                 } else if (strcmp(part, "count") == 0) {
-                    conv = 4;
+                    converter = &VitoWiFi::noconv;
+                    len = 4;
                 } else if (strcmp(part, "counts") == 0) {
-                    conv = 5;
+                    converter = &VitoWiFi::noconv;
+                    len = 2;
                 } else if (strcmp(part, "mode") == 0) {
-                    conv = 6;
+                    converter = &VitoWiFi::noconv;
+                    len = 1;
                 } else if (strcmp(part, "hours") == 0) {
-                    conv = 7;
+                    converter = &VitoWiFi::div3600;
+                    len = 4;
                 } else if (strcmp(part, "cop") == 0) {
-                    conv = 8;
+                    converter = &VitoWiFi::div10;
+                    len = 1;
                 } else {
-                    conv = strtoul(part, nullptr, 10);
+                    converter = &VitoWiFi::noconv;
+                    len = 1;
                 }
             } else if (i == 2) {
                 // len
@@ -126,7 +142,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             i++;
         }
 
-        readToBuffer(valueBuffer, 32, addr, conv);
+        readToBuffer(valueBuffer, addr, len, converter);
 
         strcpy(topicBuffer, "optoproxy/value/0x");
         sprintf(&topicBuffer[18], "%04X", addr);
@@ -135,7 +151,17 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 }
 
 void mqttSetup() {
+#ifdef MQTT_HOST
     client.setServer(MQTT_HOST, 1883);
+#else
+    wifiMgrPortalAddConfigEntry("MQTT Host", "MQTT_HOST", PortalConfigEntryType::STRING, false, true);
+    wifiMgrPortalAddConfigEntry("MQTT Username", "MQTT_USER", PortalConfigEntryType::STRING, false, true);
+    wifiMgrPortalAddConfigEntry("MQTT Password", "MQTT_PASS", PortalConfigEntryType::STRING, true, true);
+
+    const char* MQTT_HOST = wifiMgrGetConfig("MQTT_HOST");
+    if (MQTT_HOST == nullptr) return;
+    client.setServer(MQTT_HOST, 1883);
+#endif
     client.setBufferSize(350);
     client.setCallback(onMqttMessage);
 }
@@ -161,9 +187,9 @@ void mqttLoop() {
     }
 }
 
-MqttDatapoint::MqttDatapoint(int address, uint8_t conversion, uint8_t length) {
+MqttDatapoint::MqttDatapoint(int address, VitoWiFi::Converter *converter, uint8_t length) {
     this->address = address;
-    this->conversion = conversion;
+    this->converter = converter;
     this->length = length;
     this->lastValue[0] = 0;
     this->sendInterval = 30000;
@@ -206,7 +232,7 @@ bool MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, this->address, this->conversion, this->length)) {
+    if (readToBuffer(valueBuffer, this->address, this->length, this->converter)) {
         this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
     }
 }
@@ -214,8 +240,3 @@ void MqttDatapoint::loop() {
 bool MqttDatapoint::wantsToSend() const {
     return millis() - this->lastSend >= this->sendInterval;
 }
-
-#else
-void mqttSetup() {}
-void mqttLoop() {}
-#endif

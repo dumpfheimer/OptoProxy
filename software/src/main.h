@@ -10,51 +10,36 @@
 
 // We are using a WEMOS D1
 
-#define OPTOLINK_CLASS OptolinkP300
-
-#include <OptolinkP300.hpp>
-
-#ifdef ESP8266
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
-#include <SoftwareSerial.h>
-#endif
-#ifdef ESP32
-#include <WiFi.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#endif
+#include <VS2/VS2.h>
 #include <ElegantOTA.h>
+#include "VitoWiFi.h"
 
-#include "wifi-credentials.h"
+#include "configuration.h"
 #include "wifi_mgr.h"
 
 #ifdef ESP8266
-
 // CONFIGURATION FOR ESP8266
 #define LOGGING_SERIAL SoftwareSerial
-
-
+#define OPTOLINK_SERIAL Serial
 #endif
 #ifdef ESP32
 #define OPTOLINK_SERIAL_RX 3
 #define OPTOLINK_SERIAL_TX 1
-#define LOGGING_SERIAL HardwareSerial
-
+#define LOGGING_SERIAL Serial
+#define OPTOLINK_SERIAL Serial1
+#endif
+#ifndef WIFI_SSID
+#include "wifi_mgr_portal.h"
 #endif
 
-#include "httpHandlers.h"
 #include "logging.h"
 
-#ifdef ESP8266
-extern ESP8266WebServer server;
-#endif
-#ifdef ESP32
-extern WebServer server;
-#endif
+#define OPTOLINK_CLASS VitoWiFi::VitoWiFi<VitoWiFi::VS2>
 
-
+extern XWebServer server;
 OPTOLINK_CLASS* getOptolink();
+Stream *getOptolinkSerial();
+
+#include "httpHandlers.h"
 
 #endif //SOFTWARE_MAIN_H

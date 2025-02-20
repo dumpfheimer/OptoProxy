@@ -7,146 +7,111 @@
 
 bool link_locked = false;
 
-bool readToBufferUnsynchronized(char* buffer, int buffer_length, int addr, uint8_t conversion, uint8_t length) {
+const VitoWiFi::PacketVS2* result = nullptr;
+VitoWiFi::OptolinkResult error = VitoWiFi::OptolinkResult::TIMEOUT;
+bool hasResult = false;
+bool hasError = false;
+
+void onResponse(const VitoWiFi::PacketVS2& response, const VitoWiFi::Datapoint& request) {
+    result = &response;
+    hasResult = true;
+}
+
+void onError(VitoWiFi::OptolinkResult error_, const VitoWiFi::Datapoint& request) {
+    error = error_;
+    hasError = true;
+}
+
+void resetForCommunication() {
+    getOptolink()->onError(onError);
+    getOptolink()->onResponse(onResponse);
+    result = nullptr;
+    hasResult = false;
+    hasError = false;
+}
+
+bool readToBufferUnsynchronized(char* buffer, VitoWiFi::Datapoint datapoint) {
     unsigned long start = millis();
-    uint8_t valueCrap[17] = {0};
 
-    if (getOptolink()->available() < 0) {
-        println(getOptolink()->readError());
-        // return "READ_ERROR";
-    }
-    if (getOptolink()->available() > 0) {
-        getOptolink()->read(valueCrap);
-        // return "READ_ERROR";
-    }
+    resetForCommunication();
 
-    if (getOptolink()->isBusy()) {
-        strcpy(buffer, "LINK_BUSY");
+    if (!getOptolink()->read(datapoint)) {
+        strcpy(buffer, "SEND_ERROR");
         return false;
     }
 
-    uint8_t len;
-    if (length == 0) {
-        len = 2;
-        if (conversion == 1) {
-            len = 4;
-        } else if (conversion == 2) {
-            len = 1;
-        } else if (conversion == 3) {
-            len = 1;
-        } else if (conversion == 4) {
-            len = 4;
-        } else if (conversion == 5) {
-            len = 2;
-        } else if (conversion == 6) {
-            len = 1;
-        } else if (conversion == 7) {
-            len = 4;
-        } else if (conversion == 8) {
-            len = 2;
-        }
-
-        if (len > 4) len = 4;
-        if (len < 1) len = 1;
-    } else {
-        len = length;
-        if (len > 8) len = 8;
-        if (len < 1) len = 1;
-    }
-
-    uint8_t value[17] = {0};
-
-    getOptolink()->readFromDP(addr, len);
-
     while (true) {
-        if (getOptolink()->available() > 0) {
-            getOptolink()->read(value);
-
-            /*for (uint8_t i = 0; i <= len && i < 16; ++i) {
-                ltoa(value[i], buffer, 10);
-                //return;
-                //ret += String(value[i]);
-                //Serial1.print(value[i], HEX);
-            }*/
-            break;
-        } else if (getOptolink()->available() < 0) {
-            buffer[0] = 'E';
-            buffer[1] = 'R';
-            buffer[2] = 'R';
-            buffer[3] = '0';
-            buffer[4] = 'R';
-            ltoa(getOptolink()->readError(), buffer + 5, 10);
-            return false;
-        } else {
-            getOptolink()->loop();
-        }
+        getOptolink()->loop();
+        if (hasResult || hasError) break;
         if ((millis() - start) > 5000UL) {
             strcpy(buffer, "READ_TIMEOUT");
             return false;
         }
         delay(10);
     }
-    if (getOptolink()->available() < 0) {
-        println(getOptolink()->readError());
-    }
-
-    DPValue dpv(false);
-    if (conversion == 1) {
-        dpv = DPTemp("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 2) {
-        dpv = DPTempS("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 3) {
-        dpv = DPStat("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 4) {
-        dpv = DPCount("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 5) {
-        dpv = DPCountS("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 6) {
-        dpv = DPMode("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 7) {
-        dpv = DPHours("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
-    } else if (conversion == 8) {
-        dpv = DPCoP("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
+    if (hasResult) {
+        float val = datapoint.decode(*result);
+        sprintf(buffer, "%.2f", val);
+        return true;
+    } else if (hasError) {
+        if (error == VitoWiFi::OptolinkResult::TIMEOUT) {
+            strcpy(buffer, "timeout");
+        } else if (error == VitoWiFi::OptolinkResult::LENGTH) {
+            strcpy(buffer, "length_error");
+        } else if (error == VitoWiFi::OptolinkResult::NACK) {
+            strcpy(buffer, "NACK");
+        } else if (error == VitoWiFi::OptolinkResult::CRC) {
+            strcpy(buffer, "CRC");
+        } else if (error == VitoWiFi::OptolinkResult::ERROR) {
+            strcpy(buffer, "ERROR");
+        } else if (error == VitoWiFi::OptolinkResult::CONTINUE) {
+            strcpy(buffer, "CONTINUE");
+        } else if (error == VitoWiFi::OptolinkResult::PACKET) {
+            strcpy(buffer, "PACKET");
+        } else {
+            strcpy(buffer, "UNKNOWN_ERROR");
+        }
+        return false;
     } else {
-        dpv = DPRaw("tmp", "tmp", addr, false).setLength(len).decode(&value[0]);
+        strcpy(buffer, "no_result");
+        return false;
     }
-    dpv.getString(buffer, buffer_length);
-    return true;
 }
 
-bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion, uint8_t length) {
+bool readToBuffer(char* buffer, VitoWiFi::Datapoint datapoint) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = readToBufferUnsynchronized(buffer, buffer_length, addr, conversion, length);
+    bool ret = readToBufferUnsynchronized(buffer, datapoint);
     link_locked = false;
     return ret;
 }
-
-bool readToBuffer(char* buffer, int buffer_length, int addr, uint8_t conversion) {
-    return readToBuffer(buffer, buffer_length, addr, conversion, 0);
+bool readToBuffer(char* buffer, uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
+    VitoWiFi::Datapoint datapoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
+    return readToBuffer(buffer, datapoint);
 }
 
 bool readToStringLock = false;
-String readToString(int addr, uint8_t conversion, uint8_t length) {
+String readToString(VitoWiFi::Datapoint datapoint) {
     // lock to prevent buffer from being used simultaneously
     while (readToStringLock) delay(1);
     readToStringLock = true;
     char buffer[25];
-    readToBuffer(buffer, 25, addr, conversion, length);
+    readToBuffer(buffer, datapoint);
     readToStringLock = false;
     return buffer;
 }
 
-String readToString(int addr, uint8_t conversion) {
-    return readToString(addr, conversion, 0);
+String readToString(uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
+    VitoWiFi::Datapoint readDatatpoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
+    return readToString(readDatatpoint);
 }
-
-
-bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) {
+bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
     unsigned long start = millis();
-    uint8_t valueCrap[16] = {0};
+
+    resetForCommunication();
 
     bool canWrite = false;
+    uint16_t addr = datapoint.address();
     if (addr == 0x7100) canWrite = true; // kühlart
     if (addr == 0x7101) canWrite = true; // heizkreis
     if (addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
@@ -192,162 +157,44 @@ bool writeFromStringUnsynchronized(uint16_t addr, int conversion, String value) 
     // heizen langzeitermittlung: 180min
 
     if (!canWrite) {
-        server.send(200, "text/plain", "INVALID_ADDRESS");
+        if (readTo != nullptr) strcpy(readTo, "INVALID_ADDRESS");
         return true;
     }
-
-    if (getOptolink()->available() < 0) {
-        println(getOptolink()->readError());
-    }
-    if (getOptolink()->available() > 0) {
-        getOptolink()->read(valueCrap);
-    }
-
-    if (getOptolink()->isBusy()) return false;
 
     String ret = "";
 
-    /*
-    0 raw ?
-    1 temp 2_10_UL
-    2 temps 1_1_US
-    3 stat 1_1_B
-    4 count 4_1_UL
-    5 counts 2_1_UL
-    6 mode 1_1_US
-    7 hours 4_360_F
-    8 cop 1_10_F
-    */
-
-    uint8_t* writeValues;
-    size_t writeLength = 0;
-    if (conversion == 1) {
-        uint16_t tmp = (value.toFloat() * 10);
-        conv2_1_UL dpType = conv2_1_UL();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 2) {
-        uint8_t tmp = value.toInt();
-        conv1_1_US dpType = conv1_1_US();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 3) {
-        value.toLowerCase();
-        bool tmp = (value == "true" || value == "1");
-        conv1_1_B dpType = conv1_1_B();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 4) {
-        uint32_t tmp = value.toInt();
-        conv4_1_UL dpType = conv4_1_UL();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 5) {
-        uint16_t tmp = value.toInt();
-        conv2_1_UL dpType = conv2_1_UL();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 6) {
-        uint8_t tmp = value.toInt();
-        conv1_1_US dpType = conv1_1_US();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else if (conversion == 7) {
-        float tmp = value.toFloat();
-        conv4_3600_F dpType = conv4_3600_F();
-        writeValues = (uint8_t*) malloc(sizeof(uint8_t) * dpType.getLength());
-        DPValue dpValue(tmp);
-        writeLength = dpType.getLength();
-        dpType.encode(writeValues, dpValue);
-    } else {
-        server.send(200, "text/plain", "INVALID_CONVERSION_2");
-        return true;
+    if (!getOptolink()->write(datapoint, value.c_str())) {
+        if (readTo != nullptr) strcpy(readTo, "FAILED_TO_SEND");
+        return false;
     }
-
-    /*{
-        server.send(500, "text/plain", String(writeLength) +  String(writeValues[1]));
-        return true;
-    }*/
-
-    if (!getOptolink()->writeToDP(addr, writeLength, writeValues)) {
-        free(writeValues);
-        server.send(500, "text/plain", "FAILED_TO_SEND");
-        return true;
-    }
-    free(writeValues);
-
-    while (getOptolink()->isBusy() && millis() - 3000UL < start) {
-        getOptolink()->loop();
-        if (getOptolink()->available() > 0) {
-            getOptolink()->read(valueCrap);
-            break;
-        }
-        if (getOptolink()->available() < 0) {
-            getOptolink()->readError();
-            server.send(500, "text/plain", "WRITE_FAILED");
-            return true;
-        }
-        delay(10);
-    }
-
-
-
-    if (!getOptolink()->readFromDP(addr, writeLength)) {
-        server.send(500, "text/plain", "COULD_NOT_INITIALIZE_READ");
-        return true;
-    }
-
-    uint8_t serialResultBuffer[32];
-    char valueBuffer[25] = {0};
-    char httpResultBuffer[100] = {0};
-    //dpv.getString(valueBuffer, sizeof(valueBuffer));
 
     while (millis() - 3000UL < start) {
-        int8_t available = getOptolink()->available();
-
-        if (available > 0) {
-            getOptolink()->read(serialResultBuffer);
-
-            //sprintf(httpResultBuffer, "SUCCESS: %d %d %s %s %s", addr, dpv.getRawLength(), valueBuffer, serialResultBuffer, value.c_str());
-            server.send(200, "text/plain", value);
-            return true;
-        } else if (available < 0) {
-            uint8_t err = getOptolink()->readError();
-            sprintf(httpResultBuffer, "WRITE ERROR: %d %d %s %d %d", addr, writeLength, valueBuffer, err, available);
-            server.send(200, "text/plain", httpResultBuffer);
-            return true;
-        } else {
-            getOptolink()->loop();
-            yield();
-            Serial.flush();
-        }
+        getOptolink()->loop();
+        if (hasError || hasResult) break;
+        delay(10);
     }
-    if (getOptolink()->available() < 0) {
-        uint8_t err = getOptolink()->readError();
-        sprintf(httpResultBuffer, "WRITE_ERROR2: %d %d %d %s %d", addr, writeLength, conversion, valueBuffer, err);
-        server.send(500, "text/plain", httpResultBuffer);
+    if (!hasResult) {
+        if (readTo != nullptr) strcpy(readTo, "TIMEOUT");
+        return false;
+    }
+
+    if (readTo != nullptr) {
+        return readToBufferUnsynchronized(readTo, datapoint);
+    } else {
         return true;
     }
-    server.send(500, "text/plain", "WRITE_TIMEOUT");
-    return true;
+}
+bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value) {
+    return writeFromStringUnsynchronized(datapoint, value, nullptr);
 }
 
-bool writeFromString(uint16_t addr, int conversion, String value) {
+bool writeFromString(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = writeFromStringUnsynchronized(addr, conversion, std::move(value));
+    bool ret = writeFromStringUnsynchronized(datapoint, std::move(value), readTo);
     link_locked = false;
     return ret;
+}
+bool writeFromString(VitoWiFi::Datapoint datapoint, String value) {
+    return writeFromString(datapoint, value, nullptr);
 }

@@ -12,49 +12,64 @@ void handleRead() {
     }
     uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
     uint16_t len = 0;
-    if (server.hasArg("len")) len = server.arg("len").toInt();
-    if (server.hasArg("length")) len = server.arg("length").toInt();
 
-    int conv = 0;
+    VitoWiFi::Converter *converter = nullptr;
     if (server.hasArg("conv")) {
         if (server.arg("conv") == "raw") {
-            conv = 0;
+            converter = &VitoWiFi::noconv;
+            len = 4;
         } else if (server.arg("conv") == "temp") {
-            // conv4_1_UL 4
-            conv = 1;
+            // DPTemp
+            converter = &VitoWiFi::div10;
+            len = 2;
         } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-            // conv1_1_US 1
-            conv = 2;
+            // conv1_1_US 1 DPTempS
+            converter = &VitoWiFi::noconv;
+            len = 2;
         } else if (server.arg("conv") == "stat") {
-            // conv1_1_B 1
-            conv = 3;
+            // conv1_1_B 1 DPStat
+            converter = &VitoWiFi::noconv;
+            len = 1;
         } else if (server.arg("conv") == "count") {
-            // conv4_1_UL 4
-            conv = 4;
+            // conv4_1_UL 4 DPCount
+            converter = &VitoWiFi::noconv;
+            len = 4;
         } else if (server.arg("conv") == "counts") {
-            // conv2_1_UL 2
-            conv = 5;
+            // conv2_1_UL 2 DPCountS
+            converter = &VitoWiFi::noconv;
+            len = 2;
         } else if (server.arg("conv") == "mode") {
-            // conv1_1_US 1
-            conv = 6;
+            // conv1_1_US 1 DPMode
+            converter = &VitoWiFi::noconv;
+            len = 1;
         } else if (server.arg("conv") == "hours") {
-            // conv4_3600_F 4
-            conv = 7;
+            // conv4_3600_F 4 DPHours
+            converter = &VitoWiFi::div3600;
+            len = 4;
         } else if (server.arg("conv") == "cop") {
-            // conv1_10_F 2
-            conv = 8;
-        } else {
-            conv = server.arg("conv").toInt();
+            // conv1_10_F 2 DPCoP
+            converter = &VitoWiFi::div10;
+            len = 1;
+        } else if (server.arg("conv") == "noconv") {
+            converter = &VitoWiFi::noconv;
+        } else if (server.arg("conv") == "div2") {
+            converter = &VitoWiFi::div2;
+        } else if (server.arg("conv") == "div10") {
+            converter = &VitoWiFi::div10;
+        } else if (server.arg("conv") == "div3600") {
+            converter = &VitoWiFi::div3600;
         }
     }
-
-    if (server.hasArg("debug")) {
-        server.send(200, "text/plain", String(addr) + ":" + String(conv) + ":" + String(len));
+    if (converter == nullptr) {
+        server.send(500, "text/plain", "NO_CONVERTER");
         return;
     }
+    if (server.hasArg("len")) len = server.arg("len").toInt();
+    if (server.hasArg("length")) len = server.arg("length").toInt();
+    VitoWiFi::Datapoint readDatatpoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
 
-    if (!getOptolink()->connected()) {
-        server.send(500, "text/plain", "NOT_CONNECTED");
+    if (server.hasArg("debug")) {
+        server.send(200, "text/plain", String(addr) + ":" + String(len));
         return;
     }
 
@@ -62,7 +77,7 @@ void handleRead() {
     if (buff == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        if (readToBuffer(buff, 25, addr, conv, len)) {
+        if (readToBuffer(buff, readDatatpoint)) {
             server.send(200, "text/plain", buff);
         } else {
             server.send(500, "text/plain", buff);
@@ -84,51 +99,62 @@ void handleWrite() {
         server.send(400, "text/plain", "val missing");
         return;
     }
-    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);;
-    int conv = 0;
+    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
+    uint16_t len = 0;
     String strValue = server.arg("val");
 
-    if (server.arg("conv") == "raw") {
-        conv = 0;
-    } else if (server.arg("conv") == "temp") {
-        // conv4_1_UL 4
-        conv = 1;
-    } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-        // conv1_1_US 1
-        conv = 2;
-    } else if (server.arg("conv") == "stat") {
-        // conv1_1_B 1
-        conv = 3;
-    } else if (server.arg("conv") == "count") {
-        // conv4_1_UL 4
-        conv = 4;
-    } else if (server.arg("conv") == "counts") {
-        // conv2_1_UL 2
-        conv = 5;
-    } else if (server.arg("conv") == "mode") {
-        // conv1_1_US 1
-        conv = 6;
-    } else if (server.arg("conv") == "hours") {
-        // conv4_3600_F 4
-        conv = 7;
-    } else if (server.arg("conv") == "cop") {
-        // conv1_10_F 2
-        conv = 8;
-    } else {
-        //conv = server.arg("conv").toInt();
-        conv = strtoul(server.arg("conv").c_str(), NULL, 10);
+    VitoWiFi::Converter *converter = nullptr;
+    if (server.hasArg("conv")) {
+        if (server.arg("conv") == "raw") {
+            converter = &VitoWiFi::noconv;
+            len = 4;
+        } else if (server.arg("conv") == "temp") {
+            converter = &VitoWiFi::noconv;
+            len = 4;
+        } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
+            converter = &VitoWiFi::noconv;
+            len = 1;
+        } else if (server.arg("conv") == "stat") {
+            converter = &VitoWiFi::noconv;
+            len = 1;
+        } else if (server.arg("conv") == "count") {
+            converter = &VitoWiFi::noconv;
+            len = 4;
+        } else if (server.arg("conv") == "counts") {
+            converter = &VitoWiFi::noconv;
+            len = 2;
+        } else if (server.arg("conv") == "mode") {
+            converter = &VitoWiFi::noconv;
+            len = 1;
+        } else if (server.arg("conv") == "hours") {
+            converter = &VitoWiFi::div3600;
+            len = 4;
+        } else if (server.arg("conv") == "cop") {
+            len = 1;
+        } else if (server.arg("conv") == "noconv") {
+            converter = &VitoWiFi::noconv;
+        } else if (server.arg("conv") == "div2") {
+            converter = &VitoWiFi::div2;
+        } else if (server.arg("conv") == "div10") {
+            converter = &VitoWiFi::div10;
+        } else if (server.arg("conv") == "div3600") {
+            converter = &VitoWiFi::div3600;
+        }
     }
-
-    if (!getOptolink()->connected()) {
-        server.send(500, "text/plain", "NOT_CONNECTED");
+    if (converter == nullptr) {
+        server.send(500, "text/plain", "NO_CONVERTER");
+        return;
     }
+    VitoWiFi::Datapoint datapoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
 
-    bool success = writeFromString(addr, conv, strValue);
+    char *resultBuffer = new char[32];
+    bool success = writeFromString(datapoint, strValue, resultBuffer);
     if (success) {
-        //server.send(200, "text/plain", "OK");
+        server.send(200, "text/plain", resultBuffer);
     } else {
         server.send(200, "text/plain", "ERROR_NOT_SET");
     }
+    delete resultBuffer;
 }
 
 
@@ -150,32 +176,32 @@ DPStat ventilHeizenWW("ventilHeizenWW", "boiler", 0x494); // Status Umschaltvent
 
 #define DATAPOINTS*/
 void handleAussenT() {
-    String ret = readToString(0x0101, 1);
+    String ret = readToString(0x0101, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleBrauchwasserT() {
-    String ret = readToString(0x010D, 1);
+    String ret = readToString(0x010D, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleRuecklaufT() {
-    String ret = readToString(0x0106, 1);
+    String ret = readToString(0x0106, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVorlaufT() {
-    String ret = readToString(0x0105, 1);
+    String ret = readToString(0x0105, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVorlaufTsoll() {
-    String ret = readToString(0x1800, 1);
+    String ret = readToString(0x1800, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVentilHeizenWW() {
-    String ret = readToString(0x494, 3);
+    String ret = readToString(0x494, 1, &VitoWiFi::noconv);
     server.send(200, "text/plain", ret);
 }
 

@@ -12,27 +12,21 @@ If you have a 3D printer check out OptolinkConnector.blend and OptolinkConnector
     
     $ cd software
 
-4. copy wifi-credentials.h.example to wifi-credentials.h
-
-    $ [ -f src/wifi-credentials.h ] || cp src/wifi-credentials.h.example src/wifi-credentials.h
-
-5. edit the wifi credentials using your favourite text editor
-
-    $ vim src/wifi-credentials.h
-
-6. Compile
-
-    $ pio run
-
-7. Upload to device
+4. Compile and Upload
 
     $ pio run -t upload
 
-8. Check log output
+5. (optional) Check log output
 
     $ pio device monitor
 
-9. Open an issue with the error and hope for help, because things never work out the way you expect it
+6. Configure the device (if not done with configuration.h)
+   The device, if unconfigured, will open a Hotspot (Portal-XXXXXXXXXX)
+   Connect to the hotspot and navigate to http://192.168.4.1/wifiMgr/configure
+   Enter SSID, Password, Hostname, MQTT Host Username and Password (optional)
+   Click submit
+
+7. Open an issue with the error and hope for help, because things never work out the way you expect it
 
     https://github.com/dumpfheimer/OptoProxy/issues
 
