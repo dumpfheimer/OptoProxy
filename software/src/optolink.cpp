@@ -213,8 +213,6 @@ bool loopOptolink() {
 }
 
 bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
-    print("cD factor");
-    println(config->factor);
     if (config->factor == 0) config->factor += 1;
     uint32_t data = 0;
     for (int16_t i = config->len - 1; i >= 0; i--) {
@@ -238,20 +236,12 @@ bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
             val = (double) data;
         }
     }
-    print("cD factor");
-    println(config->factor);
-    print("val is ");
-    print(val);
-    print(" factor is ");
-    print(config->factor);
     if (config->factor != 0) val /= config->factor;
     config->val = val;
     return true;
 }
 
 bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
-    print(" factor ");
-    print(config->factor);
     loopOptolink();
 
     OptolinkTelegram sendTelegram;
@@ -305,18 +295,13 @@ bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
             sprintf(buffer, "RESPONSE_BYTES_MISMATCH");
             return false;
         }
-        print(" factor2 ");
-        println(config->factor);
         //factorTest(recvTelegram.getData() + 5, expectBytes, factor, sign, val);
         if (!convertData(config, recvTelegram.getData() + 5)) {
             sprintf(buffer, "DATA_CONVERSION_FAILED");
             return false;
         }
-        print(" factor3 ");
-        println(config->factor);
         print("val is (end) ");
         print(config->val);
-        delay(100);
         sprintf(buffer, "%.2f", config->val);
         return true;
     } else {
@@ -385,11 +370,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
         return false;
     }
 
-    print("loop start");
-    print(" factor ");
-    print(config->factor);
     loopOptolink();
-    print("loop end");
 
     OptolinkTelegram sendTelegram;
     OptolinkTelegram recvTelegram;
@@ -403,25 +384,17 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
     sendTelegram.pushData(config->len);
 
     double d = value.toDouble();
-    print("write double is ");
     println(d);
     if (config->factor != 0) d = d * config->factor;
     uint32_t write = d;
-    print("write is ");
-    print(write);
-    print("expect bytes");
-    print(config->len);
     for (uint8_t i = 0; i < config->len; i++) {
         //uint8_t push = write >> (expectBytes - 1 - i) * 8 & 0xFF;
         uint8_t push = write >> (i) * 8 & 0xFF;
-        print("push ");
-        println(push);
         sendTelegram.pushData(push);
     }
 
     sendTelegram.writeTo(OPTOLINK_SERIAL);
     print("send done");
-    //sendTelegram.print();
 
     print("waiting for telegram");
     readUsefulTelegram(&recvTelegram);
@@ -485,6 +458,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
     } else {
         print("not 41");
         sprintf(buffer, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+        recvTelegram.print();
         return false;
     }
 }

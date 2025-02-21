@@ -73,7 +73,6 @@ void handleRead() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        double *d = (double*) malloc(sizeof(double));
         if (readToBuffer(httpBuffer, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {

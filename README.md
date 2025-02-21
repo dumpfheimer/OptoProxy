@@ -29,6 +29,15 @@ This project runs on ESP8266 and ESP32 and connnects to WiFi and Viessmann Heate
 
     https://github.com/dumpfheimer/WiFiVitotrol/issues
 
+# WIRING THE ESP8266
+on the ESP8266 the default Serial (RX/TX) will be for logging and a SoftwareSerial is used for heater communication
+The Adapter will be connected to GROUND / 3.3V / D4 (RX) / D5 (TX)
+
+# WIRING THE ESP32
+on the ESP32 the default Serial (RX/TX) will be for logging and Serial1 is used for heater communication.
+The Adapter will be connected to GROUND / 3.3V / RX / TX of Serial1
+
+
 # HTTP ENDPOINTS
 / will show you a status page with a lot of technical details
 /getCurrentRoomTemperature returns the current room temperature set

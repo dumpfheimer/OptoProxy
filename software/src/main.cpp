@@ -2,7 +2,9 @@
 #include "mqtt.h"
 
 XWebServer server(80);
+#if defined(ESP8266)
 SoftwareSerial softwareSerial(D4, D5);
+#endif
 
 void setup() {
 #ifdef ESP32
@@ -31,7 +33,11 @@ void setup() {
     }
 #endif
 
+#if defined(ESP8266)
     OPTOLINK_SERIAL.begin(4800, SWSERIAL_8E2);
+#elif defined(ESP32)
+    OPTOLINK_SERIAL.begin(4800, SERIAL_8E2);
+#endif
 
     mqttSetup();
 }

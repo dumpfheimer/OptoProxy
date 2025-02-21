@@ -87,7 +87,7 @@ void mqttReconnect() {
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     if (length > 31) return;
-    int i;
+    unsigned int i;
     for (i = 0; i < length; i++) receiveBuffer[i] = (char) payload[i];
     receiveBuffer[i] = '\0';
     char *part = strtok(receiveBuffer, ":");
@@ -228,11 +228,6 @@ bool MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    double d;
-    print("MQTT requesting ");
-    print(String(this->address, HEX));
-    print(" with factor ");
-    println(this->factor);
     DatapointConfig config;
     config.addr = this->address;
     config.len = this->length;
