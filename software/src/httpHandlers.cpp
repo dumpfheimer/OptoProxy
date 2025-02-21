@@ -13,6 +13,7 @@ bool getDatapointConfig(DatapointConfig *config) {
     config->addr = strtoul(server.arg("addr").c_str(), NULL, 16);
     config->len = 0;
     config->factor = 1;
+    config->sign = false;
 
     if (server.hasArg("conv")) {
         if (server.arg("conv") == "raw") {

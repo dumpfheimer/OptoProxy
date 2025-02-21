@@ -3,7 +3,7 @@
 //
 #include "optolink.h"
 
-bool link_locked = false;
+volatile bool link_locked = false;
 uint8_t crc = 0;
 
 OptolinkTelegram::OptolinkTelegram() {
@@ -213,7 +213,6 @@ bool loopOptolink() {
 }
 
 bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
-    if (config->factor == 0) config->factor += 1;
     uint32_t data = 0;
     for (int16_t i = config->len - 1; i >= 0; i--) {
         data <<= 8;
@@ -223,13 +222,20 @@ bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
     if (!config->sign) {
         val = (double) data;
     } else {
+        // please dont ask about this i have know idea what i did here =)
+        // seems to work, though
+        // what should be happening:
+        // if the data is signed and starts with a 1, convert it to int rather than uint
         uint32_t x = 0b10000000;
         x <<= (config->len - 1) * 8;
         if (data & x) {
-            int32_t signeddata = (int32_t) -data;
+            data ^= x;
+            int32_t signeddata = (int32_t) data;
             uint32_t keep = 0x0;
             for (uint8_t i = 0; i < config->len; i++) keep = keep << 8 | 0xFF;
             signeddata &= keep;
+            signeddata ^= keep;
+            signeddata ^= x;
             signeddata = signeddata + 1,
             val = (double) -signeddata;
         } else {
