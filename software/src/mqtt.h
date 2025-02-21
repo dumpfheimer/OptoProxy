@@ -21,7 +21,7 @@ class MqttDatapoint {
 private:
 
 public:
-    MqttDatapoint(int address, uint16_t factor, uint8_t length);
+    MqttDatapoint(int address, uint16_t factor, uint8_t length, bool sign);
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
@@ -33,6 +33,7 @@ public:
     char hexAddress[6]{};
     unsigned long sendInterval;
     unsigned long lastSend;
+    bool sign;
 };
 
 #endif //SOFTWARE_MQTT_H

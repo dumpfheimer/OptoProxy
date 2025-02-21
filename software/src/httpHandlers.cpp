@@ -4,124 +4,89 @@ void handleRoot() {
     server.send(200, "text/plain",
                 "usage: /read?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop");
 }
-
-char *httpBuffer = new char[60];
-void handleRead() {
+bool getDatapointConfig(DatapointConfig *config) {
+    if (config == nullptr) return false;
     if (!server.hasArg("addr")) {
         server.send(400, "text/plain", "addr missing");
-        return;
+        return false;
     }
-    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
-    uint8_t len = 0;
-    uint16_t factor = 1;
+    config->addr = strtoul(server.arg("addr").c_str(), NULL, 16);
+    config->len = 0;
+    config->factor = 1;
 
     if (server.hasArg("conv")) {
         if (server.arg("conv") == "raw") {
-            len = 4;
+            config->len = 4;
         } else if (server.arg("conv") == "temp") {
-            factor = 10;
-            len = 2;
+            config->factor = 10;
+            config->len = 2;
         } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-            len = 2;
+            config->len = 2;
         } else if (server.arg("conv") == "stat") {
-            len = 1;
+            config->len = 1;
         } else if (server.arg("conv") == "count") {
-            len = 4;
+            config->len = 4;
         } else if (server.arg("conv") == "counts") {
-            len = 2;
+            config->len = 2;
         } else if (server.arg("conv") == "mode") {
-            len = 1;
+            config->len = 1;
         } else if (server.arg("conv") == "hours") {
-            factor = 3600;
-            len = 4;
+            config->factor = 3600;
+            config->len = 4;
         } else if (server.arg("conv") == "cop") {
-            factor = 10;
-            len = 1;
+            config->factor = 10;
+            config->len = 1;
         } else if (server.arg("conv") == "noconv") {
         } else if (server.arg("conv") == "div2") {
-            factor = 2;
+            config->factor = 2;
         } else if (server.arg("conv") == "div10") {
-            factor = 10;
+            config->factor = 10;
         } else if (server.arg("conv") == "div3600") {
-            factor = 3600;
+            config->factor = 3600;
         }
     }
 
-    if (server.hasArg("len")) len = server.arg("len").toInt();
-    if (server.hasArg("length")) len = server.arg("length").toInt();
-    if (len == 0) {
+    if (server.hasArg("len")) config->len = server.arg("len").toInt();
+    if (server.hasArg("length")) config->len = server.arg("length").toInt();
+    if (server.hasArg("sign") && server.arg("sign") == "true") config->sign = true;
+    if (config->len == 0) {
         server.send(500, "text/plain", "INVALID_LENGTH");
+        return false;
+    }
+    return true;
+}
+
+char *httpBuffer = new char[32];
+void handleRead() {
+    DatapointConfig *config;
+    config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    if (!getDatapointConfig(config)) {
         return;
     }
 
     if (server.hasArg("debug")) {
-        server.send(200, "text/plain", String(addr) + ":" + String(len));
+        server.send(200, "text/plain", String(config->addr) + ":" + String(config->len));
+        free(config);
         return;
     }
 
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        float f = 999;
-        if (readToBuffer(httpBuffer, &f, addr, len, factor)) {
-            server.send(200, "text/plain", String(f));
+        double *d = (double*) malloc(sizeof(double));
+        if (readToBuffer(httpBuffer, config)) {
+            server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
-        delay(500);
+        free(config);
     }
 }
 
 void handleWrite() {
-    if (!server.hasArg("addr")) {
-        server.send(400, "text/plain", "addr missing");
-        return;
-    }
-    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
-    uint8_t len = 0;
-    uint16_t factor = 1;
-
-    if (server.hasArg("conv")) {
-        if (server.arg("conv") == "raw") {
-            len = 4;
-        } else if (server.arg("conv") == "temp") {
-            factor = 10;
-            len = 2;
-        } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-            len = 2;
-        } else if (server.arg("conv") == "stat") {
-            len = 1;
-        } else if (server.arg("conv") == "count") {
-            len = 4;
-        } else if (server.arg("conv") == "counts") {
-            len = 2;
-        } else if (server.arg("conv") == "mode") {
-            len = 1;
-        } else if (server.arg("conv") == "hours") {
-            factor = 3600;
-            len = 4;
-        } else if (server.arg("conv") == "cop") {
-            factor = 10;
-            len = 1;
-        } else if (server.arg("conv") == "noconv") {
-        } else if (server.arg("conv") == "div2") {
-            factor = 2;
-        } else if (server.arg("conv") == "div10") {
-            factor = 10;
-        } else if (server.arg("conv") == "div3600") {
-            factor = 3600;
-        }
-    }
-
-    if (server.hasArg("len")) len = server.arg("len").toInt();
-    if (server.hasArg("length")) len = server.arg("length").toInt();
-    if (len == 0) {
-        server.send(500, "text/plain", "INVALID_LENGTH");
-        return;
-    }
-
-    if (server.hasArg("debug")) {
-        server.send(200, "text/plain", String(addr) + ":" + String(len));
+    DatapointConfig *config;
+    config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    if (!getDatapointConfig(config)) {
         return;
     }
 
@@ -133,12 +98,12 @@ void handleWrite() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        if (writeFromString(server.arg("val"), httpBuffer, addr, len, factor)) {
+        if (writeFromString(server.arg("val"), httpBuffer, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
-        delay(500);
+        free(config);
     }
 }
 

@@ -2,6 +2,7 @@
 #include "mqtt.h"
 
 XWebServer server(80);
+SoftwareSerial softwareSerial(D4, D5);
 
 void setup() {
 #ifdef ESP32
@@ -30,7 +31,7 @@ void setup() {
     }
 #endif
 
-    OPTOLINK_SERIAL.begin(4800, SERIAL_8E2);
+    OPTOLINK_SERIAL.begin(4800, SWSERIAL_8E2);
 
     mqttSetup();
 }
@@ -41,7 +42,7 @@ void loop() {
 #else
         loopWifi();
 #endif
-        // TODO: loop serial
+        loopOptolink();
         server.handleClient();
         mqttLoop();
         loopHttp();

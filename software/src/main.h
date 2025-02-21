@@ -11,15 +11,18 @@
 // We are using a WEMOS D1
 
 #include <ElegantOTA.h>
+#include <SoftwareSerial.h>
 
 #include "configuration.h"
 #include "wifi_mgr.h"
-#include "SoftwareSerial.h"
+
+#define USE_LOGGING
 
 #ifdef ESP8266
 // CONFIGURATION FOR ESP8266
-#define LOGGING_SERIAL SoftwareSerial
-#define OPTOLINK_SERIAL Serial
+#define LOGGING_SERIAL Serial
+#define OPTOLINK_SERIAL softwareSerial
+extern SoftwareSerial softwareSerial;
 #endif
 #ifdef ESP32
 #define OPTOLINK_SERIAL_RX 3
