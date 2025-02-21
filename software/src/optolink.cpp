@@ -152,7 +152,7 @@ void readTelegram(OptolinkTelegram* telegram) {
 
 void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     unsigned long start = millis();
-    readTelegram(telegram);
+    readTelegram(telegram, timeout - (millis() - start));
     println(telegram->getCmd());
     /*if (currentTelegram.getCmd() == 0x05) {
         // ping
