@@ -26,10 +26,10 @@ MqttDatapoint mqttDatapoints[] = {
         MqttDatapoint(0x1800, 10, 2, false),
         MqttDatapoint(0x1803, 10, 2, false),
         MqttDatapoint(0x010D, 10, 2, false),
-        MqttDatapoint(0x2006, 10, 2, false),
-        MqttDatapoint(0x2007, 10, 2, false),
-        MqttDatapoint(0x7110, 10, 2, false),
-        MqttDatapoint(0x7111, 10, 2, false),
+        MqttDatapoint(0x2006, 10, 2, true),
+        MqttDatapoint(0x2007, 10, 2, true),
+        MqttDatapoint(0x7110, 10, 2, true),
+        MqttDatapoint(0x7111, 10, 2, true),
         MqttDatapoint(0x7103, 10, 2, false),
 
         MqttDatapoint(0x2000, 10, 2, false),
@@ -95,6 +95,10 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 
     if (strcmp(topic, "optoproxy/request") == 0) {
         DatapointConfig config;
+        config.sign = false;
+        config.factor = 1;
+        config.addr = 0;
+        config.len = 0;
 
         while (part != nullptr) {
             if (i == 0) {
@@ -211,7 +215,7 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
     }
     return false;
 }
-bool mqttLock = false;
+volatile bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
     while (mqttLock) delay(1);
     mqttLock = true;
