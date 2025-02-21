@@ -56,7 +56,7 @@ bool getDatapointConfig(DatapointConfig *config) {
     return true;
 }
 
-char *httpBuffer = new char[32];
+char *httpBuffer = new char[64];
 void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));

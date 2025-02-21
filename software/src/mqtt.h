@@ -7,9 +7,7 @@
 
 #include <PubSubClient.h>
 
-#include "configuration.h"
 #include "main.h"
-#include "optolink.h"
 
 #define MQTT_TOPIC_BUFFER_SIZE 32
 #define MQTT_VALUE_BUFFER_SIZE 16

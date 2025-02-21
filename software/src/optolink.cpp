@@ -446,32 +446,42 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
     }
     if (recvTelegram.cmd == (uint8_t) 0x41) {
         if (recvTelegram.getData()[0] != 0x01 ||
-            recvTelegram.getData()[1] != 0x01) {
-            sprintf(buffer, "RESPONSE_MISMATCH %02X %02X", recvTelegram.getData()[0], recvTelegram.getData()[1]);
+            recvTelegram.getData()[1] != 0x02) {
+            sprintf(buffer, "INV_CMD %02X %02X ", recvTelegram.getData()[0], recvTelegram.getData()[1]);
+            printf("INV_CMD");
+            recvTelegram.print();
             return false;
         }
-        if (recvTelegram.getLen() != (5 + config->len)) {
-            sprintf(buffer, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram.getLen(), config->len + 5);
+        if (recvTelegram.getLen() != 5) {
+            sprintf(buffer, "INV_LEN %d != %d", recvTelegram.getLen(), 5);
+            printf("INV_LEN");
+            recvTelegram.print();
             return false;
         }
         if (recvTelegram.getData()[2] != (uint8_t) (config->addr >> 8) ||
             recvTelegram.getData()[3] != (uint8_t) (config->addr & 0xFF)) {
-            sprintf(buffer, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
+            sprintf(buffer, "INV_ADDR %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
+            printf("INV_ADDR");
+            recvTelegram.print();
             return false;
         }
         if (recvTelegram.getData()[4] != config->len) {
-            sprintf(buffer, "RESPONSE_BYTES_MISMATCH");
+            sprintf(buffer, "INV_LEN2");
+            printf("INV_LEN2");
+            recvTelegram.print();
             return false;
         }
-        print("converting data");
-        if (!convertData(config, recvTelegram.getData() + 5)) {
-            sprintf(buffer, "DATA_CONVERSION_FAILED");
+        double writeVal = value.toDouble();
+        if (!readToBufferUnsynchronized(buffer, config)) {
+            strcpy(buffer, "READ_BACK_FAILED");
             return false;
         }
-        sprintf(buffer, "%.2f", config->val);
-        print("val is (end) ");
-        print(config->val);
-        return true;
+        if (config->val == writeVal) {
+            return true;
+        } else {
+            strcpy(buffer, "READ_BACK_MISMATCH");
+            return false;
+        }
     } else {
         print("not 41");
         sprintf(buffer, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
