@@ -7,7 +7,6 @@
 
 #include <Arduino.h>
 
-#define USE_3LOGGING
 #define LOGGING_RX 0 // D8
 #define LOGGING_TX 2 // D9
 
@@ -15,7 +14,7 @@
 
 #ifdef USE_LOGGING
 #include <SoftwareSerial.h>
-SoftwareSerial loggingSerial(LOGGING_RX, LOGGING_TX);
+//SoftwareSerial loggingSerial(LOGGING_RX, LOGGING_TX);
 #endif
 
 void setupLogging();
@@ -27,10 +26,10 @@ void println();
 
 #ifdef USE_LOGGING
 bool useLogging();
-LOGGING_SERIAL* getLogger();
+Stream* getLogger();
 #else
 bool useLogging();
-LOGGING_SERIAL* getLogger();
+Stream* getLogger();
 #endif
 
 #endif //SOFTWARE_LOGGING_H

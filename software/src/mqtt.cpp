@@ -19,44 +19,45 @@ unsigned long lastConnect = 0 - 5000;
     8 cop 1_10_F
     */
 MqttDatapoint mqttDatapoints[] = {
-        MqttDatapoint(0x0101, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x0106, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x0105, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x0847, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x1800, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x1803, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x010D, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x2006, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x2007, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x7110, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x7111, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x7103, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x0101, 10, 2, true),
+        MqttDatapoint(0x0106, 10, 2, false),
+        MqttDatapoint(0x0105, 10, 2, false),
+        MqttDatapoint(0x0847, 1, 1, false),
+        MqttDatapoint(0x1800, 10, 2, false),
+        MqttDatapoint(0x1803, 10, 2, false),
+        MqttDatapoint(0x010D, 10, 2, false),
+        MqttDatapoint(0x2006, 10, 2, false),
+        MqttDatapoint(0x2007, 10, 2, false),
+        MqttDatapoint(0x7110, 10, 2, false),
+        MqttDatapoint(0x7111, 10, 2, false),
+        MqttDatapoint(0x7103, 10, 2, false),
 
-        MqttDatapoint(0x2000, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x2001, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x0116, &VitoWiFi::div10, 2),
+        MqttDatapoint(0x2000, 10, 2, false),
+        MqttDatapoint(0x2001, 10, 2, false),
+        MqttDatapoint(0x0116, 10, 2, false),
 
-        MqttDatapoint(0xb000, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x0494, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x048d, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x0480, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x04a6, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x2005, &VitoWiFi::noconv, 1),
+        MqttDatapoint(0xb000, 1, 1, false),
+        MqttDatapoint(0x0494, 1, 1, false),
+        MqttDatapoint(0x048d, 1, 1, false),
+        MqttDatapoint(0x0480, 1, 1, false),
+        MqttDatapoint(0x04a6, 1, 1, false),
+        MqttDatapoint(0x2005, 1, 1, false),
 
-        MqttDatapoint(0xB020, &VitoWiFi::noconv, 1),
-        MqttDatapoint(0x6000, &VitoWiFi::div10, 2),
-        MqttDatapoint(0x600C, &VitoWiFi::div10, 2),
+        MqttDatapoint(0xB020, 1, 1, false),
+        MqttDatapoint(0x6000, 10, 2, false),
+        MqttDatapoint(0x600C, 10, 2, false),
 
-        MqttDatapoint(0xB420, &VitoWiFi::noconv, 2),
-        MqttDatapoint(0xB421, &VitoWiFi::noconv, 2),
-        MqttDatapoint(0xB422, &VitoWiFi::noconv, 2),
-        MqttDatapoint(0xB423, &VitoWiFi::noconv, 2),
-        MqttDatapoint(0xB424, &VitoWiFi::noconv, 2),
+        MqttDatapoint(0xB420, 1, 2, false),
+        MqttDatapoint(0xB421, 1, 2, false),
+        MqttDatapoint(0xB422, 1, 2, false),
+        MqttDatapoint(0xB423, 1, 2, false),
+        MqttDatapoint(0xB424, 1, 2, false),
 };
 uint16_t mqttDatapointpointer = 0;
 
 char *topicBuffer = new char[MQTT_TOPIC_BUFFER_SIZE];
 char *valueBuffer = new char[MQTT_VALUE_BUFFER_SIZE];
+char *receiveBuffer = new char[MQTT_VALUE_BUFFER_SIZE];
 
 void mqttReconnect() {
     if (!client.connected()) {
@@ -86,67 +87,60 @@ void mqttReconnect() {
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     if (length > 31) return;
-    int i;
-    for (i = 0; i < length; i++) valueBuffer[i] = (char) payload[i];
-    valueBuffer[i] = '\0';
-    char *part = strtok(valueBuffer, ":");
+    unsigned int i;
+    for (i = 0; i < length; i++) receiveBuffer[i] = (char) payload[i];
+    receiveBuffer[i] = '\0';
+    char *part = strtok(receiveBuffer, ":");
     i = 0;
 
     if (strcmp(topic, "optoproxy/request") == 0) {
-        uint16_t addr = 0;
-        uint8_t len = 0;
+        DatapointConfig config;
 
-        VitoWiFi::Converter *converter = nullptr;
         while (part != nullptr) {
             if (i == 0) {
                 // addr
-                addr = strtoul(part, nullptr, 16);
+                config.addr = strtoul(part, nullptr, 16);
             } else if (i == 1) {
                 // conv
                 if (strcmp(part, "raw") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 4;
+                    config.len = 4;
                 } else if (strcmp(part, "temp") == 0) {
-                    converter = &VitoWiFi::div10;
-                    len = 2;
+                    config.factor = 10;
+                    config.len = 2;
                 } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 2;
+                    config.len = 2;
                 } else if (strcmp(part, "stat") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 1;
+                    config.len = 1;
                 } else if (strcmp(part, "count") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 4;
+                    config.len = 4;
                 } else if (strcmp(part, "counts") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 2;
+                    config.len = 2;
                 } else if (strcmp(part, "mode") == 0) {
-                    converter = &VitoWiFi::noconv;
-                    len = 1;
+                    config.len = 1;
                 } else if (strcmp(part, "hours") == 0) {
-                    converter = &VitoWiFi::div3600;
-                    len = 4;
+                    config.factor = 3600;
+                    config.len = 4;
                 } else if (strcmp(part, "cop") == 0) {
-                    converter = &VitoWiFi::div10;
-                    len = 1;
+                    config.factor = 10;
+                    config.len = 1;
                 } else {
-                    converter = &VitoWiFi::noconv;
-                    len = 1;
+                    config.len = 1;
                 }
             } else if (i == 2) {
                 // len
-                len = strtoul(part, nullptr, 10);
+                config.len = strtoul(part, nullptr, 10);
+            } else if (i == 3) {
+                // len
+                if (strcmp(part, "yes") == 0 || strcmp(part, "on")) config.sign = true;
             }
             part = strtok(nullptr, ":"); // Extract the next token
             i++;
         }
-
-        readToBuffer(valueBuffer, addr, len, converter);
+        readToBuffer(receiveBuffer, &config);
 
         strcpy(topicBuffer, "optoproxy/value/0x");
-        sprintf(&topicBuffer[18], "%04X", addr);
-        client.publish(topicBuffer, valueBuffer, false);
+        sprintf(&topicBuffer[18], "%04X", config.addr);
+        client.publish(topicBuffer, receiveBuffer, false);
     }
 }
 
@@ -187,10 +181,11 @@ void mqttLoop() {
     }
 }
 
-MqttDatapoint::MqttDatapoint(int address, VitoWiFi::Converter *converter, uint8_t length) {
+MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool sign) {
     this->address = address;
-    this->converter = converter;
+    this->factor = factor;
     this->length = length;
+    this->sign = sign;
     this->lastValue[0] = 0;
     this->sendInterval = 30000;
     this->lastSend = 0 - this->sendInterval;
@@ -223,6 +218,7 @@ bool MqttDatapoint::send(char* newValue) {
     strcpy(topicBuffer, "optoproxy/value/0x");
     strcpy(&topicBuffer[18], this->hexAddress);
     bool ret = client.publish(topicBuffer, newValue, true);
+    client.loop();
     if (ret) {
         this->lastSend = millis();
         strcpy(this->lastValue, newValue);
@@ -232,7 +228,12 @@ bool MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    if (readToBuffer(valueBuffer, this->address, this->length, this->converter)) {
+    DatapointConfig config;
+    config.addr = this->address;
+    config.len = this->length;
+    config.factor = this->factor;
+    config.sign = this->sign;
+    if (readToBuffer(valueBuffer, &config)) {
         this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
     }
 }

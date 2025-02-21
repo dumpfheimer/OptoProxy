@@ -3,198 +3,470 @@
 //
 #include "optolink.h"
 
-#include <utility>
-
 bool link_locked = false;
+uint8_t crc = 0;
 
-const VitoWiFi::PacketVS2* result = nullptr;
-VitoWiFi::OptolinkResult error = VitoWiFi::OptolinkResult::TIMEOUT;
-bool hasResult = false;
-bool hasError = false;
-
-void onResponse(const VitoWiFi::PacketVS2& response, const VitoWiFi::Datapoint& request) {
-    result = &response;
-    hasResult = true;
+OptolinkTelegram::OptolinkTelegram() {
+    this->reset();
+}
+void OptolinkTelegram::reset() {
+    this->error = NONE;
+    this->cmd = 0;
+    this->len = 0;
+    while (this->dataPtr > 0) this->data[this->dataPtr--] = 0;
+    this->data[0] = 0;
+    this->crc = 0;
+}
+void OptolinkTelegram::setError(OptolinkTelegramError error) {
+    this->error = error;
+}
+OptolinkTelegramError OptolinkTelegram::getError() {
+    return this->error;
+}
+void OptolinkTelegram::setCmd(uint8_t cmd) {
+    this->cmd = cmd;
+}
+uint8_t OptolinkTelegram::getCmd() {
+    return this->cmd;
+}
+void OptolinkTelegram::setLen(uint8_t len) {
+    this->len = len;
+}
+uint8_t OptolinkTelegram::getLen() {
+    return this->len;
+}
+void OptolinkTelegram::pushData(uint8_t d) {
+    this->data[this->dataPtr++] = d;
+}
+uint8_t OptolinkTelegram::getDataLength() {
+    return this->dataPtr;
+}
+uint8_t* OptolinkTelegram::getData() {
+    return this->data;
+}
+void OptolinkTelegram::setCrc(uint8_t crc) {
+    this->crc = crc;
+}
+uint8_t OptolinkTelegram::getCrc() {
+    return this->crc;
+}
+void OptolinkTelegram::calculateCrc() {
+    this->crc = getCalculatedCrc();
+}
+uint8_t OptolinkTelegram::getCalculatedCrc() {
+    uint8_t crc = 0;
+    crc += this->getDataLength();
+    for (uint8_t i = 0; i < this->getDataLength(); i++) {
+        crc += this->data[i];
+    }
+    return crc;
+}
+bool OptolinkTelegram::crcIsValid() {
+    return this->getCalculatedCrc() == this->crc;
+}
+bool OptolinkTelegram::crcEquals(uint8_t crc) {
+    return this->crc == crc;
+}
+void OptolinkTelegram::writeTo(Stream& s) {
+    this->calculateCrc();
+    s.write(this->cmd);
+    s.write(this->getDataLength());
+    for (int i = 0; i < this->getDataLength(); i++) s.write(this->data[i]);
+    this->calculateCrc();
+    s.write(this->crc);
+}
+String OptolinkTelegram::toString() {
+    String ret = String(this->cmd, HEX) + " " + String(this->getDataLength(), HEX);
+    for (uint8_t i = 0; i < this->getDataLength() && i < 10; i++) ret += ":" + String(this->data[i], HEX);
+    if (this->getDataLength() > 10) ret += "...";
+    ret += "=" + String(this->crc, HEX);
+    return ret;
+}
+void OptolinkTelegram::print() {
+    println(toString());
 }
 
-void onError(VitoWiFi::OptolinkResult error_, const VitoWiFi::Datapoint& request) {
-    error = error_;
-    hasError = true;
-}
-
-void resetForCommunication() {
-    getOptolink()->onError(onError);
-    getOptolink()->onResponse(onResponse);
-    result = nullptr;
-    hasResult = false;
-    hasError = false;
-}
-
-bool readToBufferUnsynchronized(char* buffer, VitoWiFi::Datapoint datapoint) {
+bool waitAvailable(Stream &s, unsigned long timeout) {
+    if (s.available()) return true;
     unsigned long start = millis();
+    while ((millis() - start) < timeout) {
+        if (s.available()) return true;
+    }
+    return s.available();
+}
 
-    resetForCommunication();
-
-    if (!getOptolink()->read(datapoint)) {
-        strcpy(buffer, "SEND_ERROR");
+bool read(Stream &s, uint8_t *c, long timeout) {
+    waitAvailable(s, timeout);
+    if (s.available()) {
+        OPTOLINK_SERIAL.read(c, 1);
+        return true;
+    } else {
         return false;
     }
+}
+bool read(Stream &s, uint8_t *c) {
+    return read(s, c, 20);
+}
+void readTelegram(OptolinkTelegram* telegram) {
+    println("readTelegram");
+    if (telegram == nullptr) return;
+    telegram->reset();
 
-    while (true) {
-        getOptolink()->loop();
-        if (hasResult || hasError) break;
-        if ((millis() - start) > 5000UL) {
-            strcpy(buffer, "READ_TIMEOUT");
+    uint8_t charBuffer;
+    if (!read(OPTOLINK_SERIAL, &charBuffer, 500)) {
+        telegram->setError(TIMEOUT);
+        return;
+    }
+    telegram->setCmd(charBuffer);
+    if (telegram->getCmd() == 0x05) return;
+    if (telegram->getCmd() == 0x06) return;
+    if (telegram->getCmd() == 0x15) return;
+    if (!read(OPTOLINK_SERIAL, &charBuffer)) {
+        telegram->setError(TIMEOUT);
+        return;
+    }
+    telegram->setLen(charBuffer);
+    uint8_t bytes = telegram->getLen();
+    for (uint8_t i = 0; i < bytes; i++) {
+        if (!read(OPTOLINK_SERIAL, &charBuffer)) {
+            telegram->setError(TIMEOUT);
+            return;
+        }
+        telegram->pushData(charBuffer);
+    }
+    if (!read(OPTOLINK_SERIAL, &charBuffer)) {
+        telegram->setError(TIMEOUT);
+        return;
+    }
+    telegram->setCrc(charBuffer);
+    if (!telegram->crcIsValid()) {
+        telegram->setError(CRC_ERROR);
+    }
+    print("readTelegram finished");
+    //telegram->print();
+}
+
+void readUsefulTelegram(OptolinkTelegram* telegram) {
+    readTelegram(telegram);
+    println(telegram->getCmd());
+    /*if (currentTelegram.getCmd() == 0x05) {
+        // ping
+        currentTelegram.reset();
+        currentTelegram.setCmd(0x04);
+        currentTelegram.writeTo(OPTOLINK_SERIAL);
+        return readUsefulTelegram();
+    }*/
+    if (telegram->getCmd() == 0x05) {
+        println("got ping msg");
+        // ping
+        OPTOLINK_SERIAL.write(0x04);
+        readTelegram(telegram);
+        if (telegram->getCmd() == 0x05) {
+            println("got second ping");
+            telegram->reset();
+            telegram->setCmd(0x16);
+            telegram->writeTo(OPTOLINK_SERIAL);
+            readTelegram(telegram);
+            if (telegram->getCmd() == 0x06) {
+                return readUsefulTelegram(telegram);
+            }
+        } else {
+            println("did not get second ping message");
+        }
+    }
+    if (telegram->getCmd() == 0x06) {
+        // ack
+        return readUsefulTelegram(telegram);
+    }
+}
+
+bool loopOptolink() {
+    if (!OPTOLINK_SERIAL.available()) return false;
+    OptolinkTelegram loopTelegram;
+    OPTOLINK_SERIAL.setTimeout(50);
+    readTelegram(&loopTelegram);
+    println("read a telegram in loop");
+    print(loopTelegram.getCmd());
+    if (loopTelegram.getCmd() == 0x05) {
+        while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+        OPTOLINK_SERIAL.write(0x04);
+        println("waiting for second telegram");
+        waitAvailable(OPTOLINK_SERIAL, 2000);
+        readTelegram(&loopTelegram);
+        println("read second telegram");
+        if (loopTelegram.getCmd() == 0x05) {
+            println("was 05 too");
+            while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+            loopTelegram.reset();
+            loopTelegram.setCmd(0x16);
+            loopTelegram.writeTo(OPTOLINK_SERIAL);
+            readTelegram(&loopTelegram);
+            println("read third telegram");
+            if (loopTelegram.getCmd() == 0x06) {
+                println("was 06, handshake completed");
+                while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
+    if (config->factor == 0) config->factor += 1;
+    uint32_t data = 0;
+    for (int16_t i = config->len - 1; i >= 0; i--) {
+        data <<= 8;
+        data |= dataBuffer[i];
+    }
+    double val = 0;
+    if (!config->sign) {
+        val = (double) data;
+    } else {
+        uint32_t x = 0b10000000;
+        x <<= (config->len - 1) * 8;
+        if (data & x) {
+            int32_t signeddata = (int32_t) -data;
+            uint32_t keep = 0x0;
+            for (uint8_t i = 0; i < config->len; i++) keep = keep << 8 | 0xFF;
+            signeddata &= keep;
+            signeddata = signeddata + 1,
+            val = (double) -signeddata;
+        } else {
+            val = (double) data;
+        }
+    }
+    if (config->factor != 0) val /= config->factor;
+    config->val = val;
+    return true;
+}
+
+bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
+    loopOptolink();
+
+    OptolinkTelegram sendTelegram;
+    OptolinkTelegram recvTelegram;
+
+    sendTelegram.reset();
+    sendTelegram.setCmd(0x41);
+    sendTelegram.pushData(0x00);
+    sendTelegram.pushData(0x01);
+    sendTelegram.pushData(config->addr >> 8);
+    sendTelegram.pushData(config->addr & 0xFF);
+    sendTelegram.pushData(config->len);
+    sendTelegram.writeTo(OPTOLINK_SERIAL);
+    //sendTelegram.print();
+
+    readUsefulTelegram(&recvTelegram);
+
+    if (recvTelegram.getError() != NONE) {
+        switch (recvTelegram.getError()) {
+            case TIMEOUT:
+                sprintf(buffer, "TIMEOUT %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+                return false;
+            case CRC_ERROR:
+                strcpy(buffer, "CRC ");
+                sprintf(buffer + 4, "%02X ", recvTelegram.getCalculatedCrc());
+                sprintf(buffer + 7, "%02X ", recvTelegram.getCrc());
+                //strcpy(buffer + 10, recvTelegram.toString().c_str());
+                return false;
+                break;
+            default:
+                sprintf(buffer, "UNKNOWN");
+                return false;
+        }
+    }
+    if (recvTelegram.cmd == (uint8_t) 0x41) {
+        if (recvTelegram.getData()[0] != 0x01 ||
+            recvTelegram.getData()[1] != 0x01) {
+            sprintf(buffer, "RESPONSE_MISMATCH %02X %02X", recvTelegram.getData()[0], recvTelegram.getData()[1]);
             return false;
         }
-        delay(10);
-    }
-    if (hasResult) {
-        float val = datapoint.decode(*result);
-        sprintf(buffer, "%.2f", val);
-        return true;
-    } else if (hasError) {
-        if (error == VitoWiFi::OptolinkResult::TIMEOUT) {
-            strcpy(buffer, "timeout");
-        } else if (error == VitoWiFi::OptolinkResult::LENGTH) {
-            strcpy(buffer, "length_error");
-        } else if (error == VitoWiFi::OptolinkResult::NACK) {
-            strcpy(buffer, "NACK");
-        } else if (error == VitoWiFi::OptolinkResult::CRC) {
-            strcpy(buffer, "CRC");
-        } else if (error == VitoWiFi::OptolinkResult::ERROR) {
-            strcpy(buffer, "ERROR");
-        } else if (error == VitoWiFi::OptolinkResult::CONTINUE) {
-            strcpy(buffer, "CONTINUE");
-        } else if (error == VitoWiFi::OptolinkResult::PACKET) {
-            strcpy(buffer, "PACKET");
-        } else {
-            strcpy(buffer, "UNKNOWN_ERROR");
+        if (recvTelegram.getLen() != (5 + config->len)) {
+            sprintf(buffer, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram.getLen(), config->len + 5);
+            return false;
         }
-        return false;
+        if (recvTelegram.getData()[2] != (uint8_t) (config->addr >> 8) ||
+            recvTelegram.getData()[3] != (uint8_t) (config->addr & 0xFF)) {
+            sprintf(buffer, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
+            return false;
+        }
+        if (recvTelegram.getData()[4] != config->len) {
+            sprintf(buffer, "RESPONSE_BYTES_MISMATCH");
+            return false;
+        }
+        //factorTest(recvTelegram.getData() + 5, expectBytes, factor, sign, val);
+        if (!convertData(config, recvTelegram.getData() + 5)) {
+            sprintf(buffer, "DATA_CONVERSION_FAILED");
+            return false;
+        }
+        print("val is (end) ");
+        print(config->val);
+        sprintf(buffer, "%.2f", config->val);
+        return true;
     } else {
-        strcpy(buffer, "no_result");
+        print("not 41");
+        sprintf(buffer, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
         return false;
     }
 }
 
-bool readToBuffer(char* buffer, VitoWiFi::Datapoint datapoint) {
+bool readToBuffer(char* buffer, DatapointConfig *config) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = readToBufferUnsynchronized(buffer, datapoint);
+    bool ret = readToBufferUnsynchronized(buffer, config);
     link_locked = false;
     return ret;
 }
-bool readToBuffer(char* buffer, uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
-    VitoWiFi::Datapoint datapoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
-    return readToBuffer(buffer, datapoint);
-}
 
-bool readToStringLock = false;
-String readToString(VitoWiFi::Datapoint datapoint) {
-    // lock to prevent buffer from being used simultaneously
-    while (readToStringLock) delay(1);
-    readToStringLock = true;
-    char buffer[25];
-    readToBuffer(buffer, datapoint);
-    readToStringLock = false;
-    return buffer;
-}
-
-String readToString(uint16_t addr, uint8_t len, VitoWiFi::Converter *converter) {
-    VitoWiFi::Datapoint readDatatpoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
-    return readToString(readDatatpoint);
-}
-bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
-    unsigned long start = millis();
-
-    resetForCommunication();
-
+bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointConfig *config) {
     bool canWrite = false;
-    uint16_t addr = datapoint.address();
-    if (addr == 0x7100) canWrite = true; // kühlart
-    if (addr == 0x7101) canWrite = true; // heizkreis
-    if (addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
-    if (addr == 0x7103) canWrite = true; // min vorlauftemp kühlen
-    if (addr == 0x7104) canWrite = true; // einfluss raumtemp kühlen
-    if (addr == 0x7106) canWrite = true; // witterungs / raumtemperaturgeführte kühlung
-    if (addr == 0x7107) canWrite = true; // welcher heizkreis / tempsensor für kühlung
-    if (addr == 0x7110) canWrite = true; // kühlkennlinie neigung
-    if (addr == 0x7111) canWrite = true; // kühlkennlinie steigung
-    if (addr == 0x2001) canWrite = true; // raumtemp red soll
-    if (addr == 0x2003) canWrite = true; // use remote control
-    if (addr == 0x2000) canWrite = true; // raumtep soll
-    if (addr == 0x2005) canWrite = true; // ramtemperaturregelung
-    if (addr == 0x2006) canWrite = true; // heizkennlinie niveau
-    if (addr == 0x2007) canWrite = true; // heizkennlinie steigung
-    if (addr == 0x200A) canWrite = true; // Einfluss Raumtemperaturaufschaltung
-    if (addr == 0x2034) canWrite = true; // Einfluss Raumtemperaturaufschaltung kühlen
-    if (addr == 0xb000) canWrite = true; // betriebsmodus
-    if (addr == 0x7002) canWrite = true; // temerpatur mittel langzeitermittlung min (counts)
-    if (addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
+    if (config->addr == 0x7100) canWrite = true; // kühlart
+    if (config->addr == 0x7101) canWrite = true; // heizkreis
+    if (config->addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
+    if (config->addr == 0x7103) canWrite = true; // min vorlauftemp kühlen
+    if (config->addr == 0x7104) canWrite = true; // einfluss raumtemp kühlen
+    if (config->addr == 0x7106) canWrite = true; // witterungs / raumtemperaturgeführte kühlung
+    if (config->addr == 0x7107) canWrite = true; // welcher heizkreis / tempsensor für kühlung
+    if (config->addr == 0x7110) canWrite = true; // kühlkennlinie neigung
+    if (config->addr == 0x7111) canWrite = true; // kühlkennlinie steigung
+    if (config->addr == 0x2001) canWrite = true; // raumtemp red soll
+    if (config->addr == 0x2003) canWrite = true; // use remote control
+    if (config->addr == 0x2000) canWrite = true; // raumtep soll
+    if (config->addr == 0x2005) canWrite = true; // ramtemperaturregelung
+    if (config->addr == 0x2006) canWrite = true; // heizkennlinie niveau
+    if (config->addr == 0x2007) canWrite = true; // heizkennlinie steigung
+    if (config->addr == 0x200A) canWrite = true; // Einfluss Raumtemperaturaufschaltung
+    if (config->addr == 0x2034) canWrite = true; // Einfluss Raumtemperaturaufschaltung kühlen
+    if (config->addr == 0xb000) canWrite = true; // betriebsmodus
+    if (config->addr == 0x7002) canWrite = true; // temerpatur mittel langzeitermittlung min (counts)
+    if (config->addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
-    if (addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
-    if (addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
-    if (addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
-    if (addr == 0x7414) canWrite = true; // Startleistung
-    if (addr == 0x5006) canWrite = true; // Min. Pausenzeit Verdichter
+    if (config->addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
+    if (config->addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
+    if (config->addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
+    if (config->addr == 0x7414) canWrite = true; // Startleistung
+    if (config->addr == 0x5006) canWrite = true; // Min. Pausenzeit Verdichter
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll
-    // to start: http://192.168.11.30/write?addr=0xB020&len=1&val=true&stat=1
-    if (addr == 0xB020) canWrite = true; // 1x WW bereiten
-    if (addr == 0x6000) canWrite = true; // 1x WW Soll
-    if (addr == 0x600C) canWrite = true; // 1x WW2 Soll
+    // to start: http://192.168.11.30/write?config->addr=0xB020&len=1&val=true&stat=1
+    if (config->addr == 0xB020) canWrite = true; // 1x WW bereiten
+    if (config->addr == 0x6000) canWrite = true; // 1x WW Soll
+    if (config->addr == 0x600C) canWrite = true; // 1x WW2 Soll
 
     // http://192.168.11.30/read?addr=0x1A52&conv=cop Ventilator PROZENT
     // http://192.168.11.30/read?addr=0x1A53&conv=cop Lüfter Prozent
     // http://192.168.11.30/read?addr=0x1A54&conv=cop Kompressor Prozent
     // http://192.168.11.30/read?addr=0x1AC3&conv=cop Verdichter Last Prozent
-    if ((addr & 0xFFF0) == 0x01D0) canWrite = true;
+    if ((config->addr & 0xFFF0) == 0x01D0) canWrite = true;
 
     // kühlen langzeitermittlung: 30 min
     //                            7004: 10 //bei RaumSollTemp + 1 kühlen
     // heizen langzeitermittlung: 180min
 
     if (!canWrite) {
-        if (readTo != nullptr) strcpy(readTo, "INVALID_ADDRESS");
-        return true;
-    }
-
-    String ret = "";
-
-    if (!getOptolink()->write(datapoint, value.c_str())) {
-        if (readTo != nullptr) strcpy(readTo, "FAILED_TO_SEND");
+        if (buffer != nullptr) strcpy(buffer, "INVALID_ADDRESS");
         return false;
     }
 
-    while (millis() - 3000UL < start) {
-        getOptolink()->loop();
-        if (hasError || hasResult) break;
-        delay(10);
-    }
-    if (!hasResult) {
-        if (readTo != nullptr) strcpy(readTo, "TIMEOUT");
-        return false;
+    loopOptolink();
+
+    OptolinkTelegram sendTelegram;
+    OptolinkTelegram recvTelegram;
+
+    sendTelegram.reset();
+    sendTelegram.setCmd(0x41);
+    sendTelegram.pushData(0x00);
+    sendTelegram.pushData(0x02);
+    sendTelegram.pushData(config->addr >> 8);
+    sendTelegram.pushData(config->addr & 0xFF);
+    sendTelegram.pushData(config->len);
+
+    double d = value.toDouble();
+    println(d);
+    if (config->factor != 0) d = d * config->factor;
+    uint32_t write = d;
+    for (uint8_t i = 0; i < config->len; i++) {
+        //uint8_t push = write >> (expectBytes - 1 - i) * 8 & 0xFF;
+        uint8_t push = write >> (i) * 8 & 0xFF;
+        sendTelegram.pushData(push);
     }
 
-    if (readTo != nullptr) {
-        return readToBufferUnsynchronized(readTo, datapoint);
+    sendTelegram.writeTo(OPTOLINK_SERIAL);
+    print("send done");
+
+    print("waiting for telegram");
+    readUsefulTelegram(&recvTelegram);
+    print("got telegram");
+
+    if (recvTelegram.getError() != NONE) {
+        switch (recvTelegram.getError()) {
+            case TIMEOUT:
+                sprintf(buffer, "TIMEOUT %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+                return false;
+            case CRC_ERROR:
+                strcpy(buffer, "CRC ");
+                sprintf(buffer + 4, "%02X ", recvTelegram.getCalculatedCrc());
+                sprintf(buffer + 7, "%02X ", recvTelegram.getCrc());
+                //strcpy(buffer + 10, recvTelegram.toString().c_str());
+                return false;
+                break;
+            default:
+                sprintf(buffer, "UNKNOWN");
+                return false;
+        }
+    }
+    if (recvTelegram.cmd == (uint8_t) 0x41) {
+        if (recvTelegram.getData()[0] != 0x01 ||
+            recvTelegram.getData()[1] != 0x02) {
+            sprintf(buffer, "INV_CMD %02X %02X ", recvTelegram.getData()[0], recvTelegram.getData()[1]);
+            printf("INV_CMD");
+            recvTelegram.print();
+            return false;
+        }
+        if (recvTelegram.getLen() != 5) {
+            sprintf(buffer, "INV_LEN %d != %d", recvTelegram.getLen(), 5);
+            printf("INV_LEN");
+            recvTelegram.print();
+            return false;
+        }
+        if (recvTelegram.getData()[2] != (uint8_t) (config->addr >> 8) ||
+            recvTelegram.getData()[3] != (uint8_t) (config->addr & 0xFF)) {
+            sprintf(buffer, "INV_ADDR %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
+            printf("INV_ADDR");
+            recvTelegram.print();
+            return false;
+        }
+        if (recvTelegram.getData()[4] != config->len) {
+            sprintf(buffer, "INV_LEN2");
+            printf("INV_LEN2");
+            recvTelegram.print();
+            return false;
+        }
+        double writeVal = value.toDouble();
+        if (!readToBufferUnsynchronized(buffer, config)) {
+            strcpy(buffer, "READ_BACK_FAILED");
+            return false;
+        }
+        if (config->val == writeVal) {
+            return true;
+        } else {
+            strcpy(buffer, "READ_BACK_MISMATCH");
+            return false;
+        }
     } else {
-        return true;
+        print("not 41");
+        sprintf(buffer, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+        recvTelegram.print();
+        return false;
     }
 }
-bool writeFromStringUnsynchronized(VitoWiFi::Datapoint datapoint, String value) {
-    return writeFromStringUnsynchronized(datapoint, value, nullptr);
-}
 
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value, char* readTo) {
+bool writeFromString(const String& value, char* buffer, DatapointConfig *config) {
     while (link_locked) delay(1);
     link_locked = true;
-    bool ret = writeFromStringUnsynchronized(datapoint, std::move(value), readTo);
+    bool ret = writeFromStringUnsynchronized(value, buffer, config);
     link_locked = false;
     return ret;
-}
-bool writeFromString(VitoWiFi::Datapoint datapoint, String value) {
-    return writeFromString(datapoint, value, nullptr);
 }

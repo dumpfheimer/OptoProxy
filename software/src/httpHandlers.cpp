@@ -4,157 +4,106 @@ void handleRoot() {
     server.send(200, "text/plain",
                 "usage: /read?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop");
 }
-
-void handleRead() {
+bool getDatapointConfig(DatapointConfig *config) {
+    if (config == nullptr) return false;
     if (!server.hasArg("addr")) {
         server.send(400, "text/plain", "addr missing");
-        return;
+        return false;
     }
-    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
-    uint16_t len = 0;
+    config->addr = strtoul(server.arg("addr").c_str(), NULL, 16);
+    config->len = 0;
+    config->factor = 1;
 
-    VitoWiFi::Converter *converter = nullptr;
     if (server.hasArg("conv")) {
         if (server.arg("conv") == "raw") {
-            converter = &VitoWiFi::noconv;
-            len = 4;
+            config->len = 4;
         } else if (server.arg("conv") == "temp") {
-            // DPTemp
-            converter = &VitoWiFi::div10;
-            len = 2;
+            config->factor = 10;
+            config->len = 2;
         } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-            // conv1_1_US 1 DPTempS
-            converter = &VitoWiFi::noconv;
-            len = 2;
+            config->len = 2;
         } else if (server.arg("conv") == "stat") {
-            // conv1_1_B 1 DPStat
-            converter = &VitoWiFi::noconv;
-            len = 1;
+            config->len = 1;
         } else if (server.arg("conv") == "count") {
-            // conv4_1_UL 4 DPCount
-            converter = &VitoWiFi::noconv;
-            len = 4;
+            config->len = 4;
         } else if (server.arg("conv") == "counts") {
-            // conv2_1_UL 2 DPCountS
-            converter = &VitoWiFi::noconv;
-            len = 2;
+            config->len = 2;
         } else if (server.arg("conv") == "mode") {
-            // conv1_1_US 1 DPMode
-            converter = &VitoWiFi::noconv;
-            len = 1;
+            config->len = 1;
         } else if (server.arg("conv") == "hours") {
-            // conv4_3600_F 4 DPHours
-            converter = &VitoWiFi::div3600;
-            len = 4;
+            config->factor = 3600;
+            config->len = 4;
         } else if (server.arg("conv") == "cop") {
-            // conv1_10_F 2 DPCoP
-            converter = &VitoWiFi::div10;
-            len = 1;
+            config->factor = 10;
+            config->len = 1;
         } else if (server.arg("conv") == "noconv") {
-            converter = &VitoWiFi::noconv;
         } else if (server.arg("conv") == "div2") {
-            converter = &VitoWiFi::div2;
+            config->factor = 2;
         } else if (server.arg("conv") == "div10") {
-            converter = &VitoWiFi::div10;
+            config->factor = 10;
         } else if (server.arg("conv") == "div3600") {
-            converter = &VitoWiFi::div3600;
+            config->factor = 3600;
         }
     }
-    if (converter == nullptr) {
-        server.send(500, "text/plain", "NO_CONVERTER");
+
+    if (server.hasArg("len")) config->len = server.arg("len").toInt();
+    if (server.hasArg("length")) config->len = server.arg("length").toInt();
+    if (server.hasArg("sign") && server.arg("sign") == "true") config->sign = true;
+    if (config->len == 0) {
+        server.send(500, "text/plain", "INVALID_LENGTH");
+        return false;
+    }
+    return true;
+}
+
+char *httpBuffer = new char[64];
+void handleRead() {
+    DatapointConfig *config;
+    config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    if (!getDatapointConfig(config)) {
         return;
     }
-    if (server.hasArg("len")) len = server.arg("len").toInt();
-    if (server.hasArg("length")) len = server.arg("length").toInt();
-    VitoWiFi::Datapoint readDatatpoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
 
     if (server.hasArg("debug")) {
-        server.send(200, "text/plain", String(addr) + ":" + String(len));
+        server.send(200, "text/plain", String(config->addr) + ":" + String(config->len));
+        free(config);
         return;
     }
 
-    char *buff = (char*) malloc(sizeof(char) * 25);
-    if (buff == nullptr) {
+    if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        if (readToBuffer(buff, readDatatpoint)) {
-            server.send(200, "text/plain", buff);
+        if (readToBuffer(httpBuffer, config)) {
+            server.send(200, "text/plain", httpBuffer);
         } else {
-            server.send(500, "text/plain", buff);
+            server.send(500, "text/plain", httpBuffer);
         }
-        free(buff);
+        free(config);
     }
 }
 
 void handleWrite() {
-    if (!server.hasArg("addr")) {
-        server.send(400, "text/plain", "addr missing");
+    DatapointConfig *config;
+    config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    if (!getDatapointConfig(config)) {
         return;
     }
-    if (!server.hasArg("conv")) {
-        server.send(400, "text/plain", "conv missing");
-        return;
-    }
+
     if (!server.hasArg("val")) {
-        server.send(400, "text/plain", "val missing");
+        server.send(500, "text/plain", "val not set");
         return;
     }
-    uint16_t addr = strtoul(server.arg("addr").c_str(), NULL, 16);
-    uint16_t len = 0;
-    String strValue = server.arg("val");
 
-    VitoWiFi::Converter *converter = nullptr;
-    if (server.hasArg("conv")) {
-        if (server.arg("conv") == "raw") {
-            converter = &VitoWiFi::noconv;
-            len = 4;
-        } else if (server.arg("conv") == "temp") {
-            converter = &VitoWiFi::noconv;
-            len = 4;
-        } else if (server.arg("conv") == "temps" || server.arg("conv") == "percent") {
-            converter = &VitoWiFi::noconv;
-            len = 1;
-        } else if (server.arg("conv") == "stat") {
-            converter = &VitoWiFi::noconv;
-            len = 1;
-        } else if (server.arg("conv") == "count") {
-            converter = &VitoWiFi::noconv;
-            len = 4;
-        } else if (server.arg("conv") == "counts") {
-            converter = &VitoWiFi::noconv;
-            len = 2;
-        } else if (server.arg("conv") == "mode") {
-            converter = &VitoWiFi::noconv;
-            len = 1;
-        } else if (server.arg("conv") == "hours") {
-            converter = &VitoWiFi::div3600;
-            len = 4;
-        } else if (server.arg("conv") == "cop") {
-            len = 1;
-        } else if (server.arg("conv") == "noconv") {
-            converter = &VitoWiFi::noconv;
-        } else if (server.arg("conv") == "div2") {
-            converter = &VitoWiFi::div2;
-        } else if (server.arg("conv") == "div10") {
-            converter = &VitoWiFi::div10;
-        } else if (server.arg("conv") == "div3600") {
-            converter = &VitoWiFi::div3600;
-        }
-    }
-    if (converter == nullptr) {
-        server.send(500, "text/plain", "NO_CONVERTER");
-        return;
-    }
-    VitoWiFi::Datapoint datapoint = VitoWiFi::Datapoint("tmp", addr, len, *converter);
-
-    char *resultBuffer = new char[32];
-    bool success = writeFromString(datapoint, strValue, resultBuffer);
-    if (success) {
-        server.send(200, "text/plain", resultBuffer);
+    if (httpBuffer == nullptr) {
+        server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        server.send(200, "text/plain", "ERROR_NOT_SET");
+        if (writeFromString(server.arg("val"), httpBuffer, config)) {
+            server.send(200, "text/plain", httpBuffer);
+        } else {
+            server.send(500, "text/plain", httpBuffer);
+        }
+        free(config);
     }
-    delete resultBuffer;
 }
 
 
@@ -175,35 +124,42 @@ DPTemp vorlaufTsoll("vorlaufTsoll", "boiler", 0x1800); // Vorlaufsolltemperatur 
 DPStat ventilHeizenWW("ventilHeizenWW", "boiler", 0x494); // Status Umschaltventil Heizen/Warmwasser Ein/Aus
 
 #define DATAPOINTS*/
+/*
 void handleAussenT() {
-    String ret = readToString(0x0101, 4, &VitoWiFi::div10);
+    float f = 0;
+    String ret = readToString(&f, 0x0101, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleBrauchwasserT() {
-    String ret = readToString(0x010D, 4, &VitoWiFi::div10);
+    float f = 0;
+    String ret = readToString(&f, 0x010D, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleRuecklaufT() {
-    String ret = readToString(0x0106, 4, &VitoWiFi::div10);
+    float f = 0;
+    String ret = readToString(&f, 0x0106, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVorlaufT() {
-    String ret = readToString(0x0105, 4, &VitoWiFi::div10);
+    float f = 0;
+    String ret = readToString(&f, 0x0105, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVorlaufTsoll() {
-    String ret = readToString(0x1800, 4, &VitoWiFi::div10);
+    float f = 0;
+    String ret = readToString(&f, 0x1800, 4, &VitoWiFi::div10);
     server.send(200, "text/plain", ret);
 }
 
 void handleVentilHeizenWW() {
-    String ret = readToString(0x494, 1, &VitoWiFi::noconv);
+    float f = 0;
+    String ret = readToString(&f, 0x494, 1, &VitoWiFi::noconv);
     server.send(200, "text/plain", ret);
-}
+}*/
 
 #define MAX_TIMER_GPIO 20
 unsigned long timer_start[MAX_TIMER_GPIO] = {0};
@@ -255,12 +211,13 @@ void setupHttp() {
     server.on("/", handleRoot);
     server.on("/read", handleRead);
     server.on("/write", handleWrite);
+    /*
     server.on("/aussenT", handleAussenT);
     server.on("/brauchwasserT", handleBrauchwasserT);
     server.on("/ruecklaufT", handleRuecklaufT);
     server.on("/vorlaufT", handleVorlaufT);
     server.on("/vorlaufTsoll", handleVorlaufTsoll);
-    server.on("/ventilHeizenWW", handleVentilHeizenWW);
+    server.on("/ventilHeizenWW", handleVentilHeizenWW);*/
     server.on("/gpio/write", handleGpioWrite);
 
     server.begin();

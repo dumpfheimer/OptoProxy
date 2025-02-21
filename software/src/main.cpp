@@ -1,14 +1,9 @@
 #include "main.h"
 #include "mqtt.h"
-#include "VitoWiFi.h"
 
 XWebServer server(80);
-
-#ifdef ESP8266
-OPTOLINK_CLASS optolink(&Serial);
-#endif
-#ifdef ESP32
-OPTOLINK_CLASS optolink(&OPTOLINK_SERIAL);
+#if defined(ESP8266)
+SoftwareSerial softwareSerial(D4, D5);
 #endif
 
 void setup() {
@@ -38,16 +33,13 @@ void setup() {
     }
 #endif
 
-    optolink.begin();
+#if defined(ESP8266)
+    OPTOLINK_SERIAL.begin(4800, SWSERIAL_8E2);
+#elif defined(ESP32)
+    OPTOLINK_SERIAL.begin(4800, SERIAL_8E2);
+#endif
 
     mqttSetup();
-}
-
-OPTOLINK_CLASS *getOptolink() {
-    return &optolink;
-}
-Stream *getOptolinkSerial() {
-    return &OPTOLINK_SERIAL;
 }
 
 void loop() {
@@ -56,7 +48,7 @@ void loop() {
 #else
         loopWifi();
 #endif
-        optolink.loop();
+        loopOptolink();
         server.handleClient();
         mqttLoop();
         loopHttp();

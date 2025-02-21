@@ -10,17 +10,17 @@
 
 // We are using a WEMOS D1
 
-#include <VS2/VS2.h>
 #include <ElegantOTA.h>
-#include "VitoWiFi.h"
 
 #include "configuration.h"
 #include "wifi_mgr.h"
 
 #ifdef ESP8266
+#include <SoftwareSerial.h>
 // CONFIGURATION FOR ESP8266
-#define LOGGING_SERIAL SoftwareSerial
-#define OPTOLINK_SERIAL Serial
+#define LOGGING_SERIAL Serial
+#define OPTOLINK_SERIAL softwareSerial
+extern SoftwareSerial softwareSerial;
 #endif
 #ifdef ESP32
 #define OPTOLINK_SERIAL_RX 3
@@ -37,7 +37,6 @@
 #define OPTOLINK_CLASS VitoWiFi::VitoWiFi<VitoWiFi::VS2>
 
 extern XWebServer server;
-OPTOLINK_CLASS* getOptolink();
 Stream *getOptolinkSerial();
 
 #include "httpHandlers.h"

@@ -1,24 +1,24 @@
 # ABOUT THIS PROJECT
 
-This project runs on ESP8266 (and probably is easily portable to ESP32) and connects to WiFi and Viessmann Heaters using Optolink (https://github.com/openv/openv/wiki/Die-Optolink-Schnittstelle) with a self-made adapter (https://github.com/openv/openv/wiki/Bauanleitung)
+This project runs on ESP8266 (and untested ESP32) and connects to WiFi and Viessmann Heaters using Optolink (https://github.com/openv/openv/wiki/Die-Optolink-Schnittstelle) with a self-made adapter (https://github.com/openv/openv/wiki/Bauanleitung)
 If you have a 3D printer check out OptolinkConnector.blend and OptolinkConnector.stl located in the hardware folder.
 
 # INSTALL INSTRUCTIONS
 
 1. Check out this repository
 2. Download and install PlatformIO
-	https://docs.platformio.org/en/latest/core/installation/index.html
+   https://docs.platformio.org/en/latest/core/installation/index.html
 3. Go to the software folder of this repository
-    
-    $ cd software
+
+   $ cd software
 
 4. Compile and Upload
 
-    $ pio run -t upload
+   $ pio run -t upload
 
 5. (optional) Check log output
 
-    $ pio device monitor
+   $ pio device monitor
 
 6. Configure the device (if not done with configuration.h)
    The device, if unconfigured, will open a Hotspot (Portal-XXXXXXXXXX)
@@ -28,7 +28,7 @@ If you have a 3D printer check out OptolinkConnector.blend and OptolinkConnector
 
 7. Open an issue with the error and hope for help, because things never work out the way you expect it
 
-    https://github.com/dumpfheimer/OptoProxy/issues
+   https://github.com/dumpfheimer/OptoProxy/issues
 
 # HOW TO USE OptoProxy
 ## General information
@@ -63,3 +63,19 @@ http://<IP_OF_ESP8266>/read?addr=0x2000&conv=temp
 Example URL for writing Address 0x2000 (Room Temperature Setpoint)
 
 http://<IP_OF_ESP8266>/write?addr=0x2000&conv=temp&val=21
+
+# WIRING
+
+## WIRING THE ESP8266
+on the ESP8266 the default Serial (RX/TX) will be for logging and a SoftwareSerial is used for heater communication
+The Adapter will be connected to GROUND / 3.3V / D4 (RX) / D5 (TX)
+
+## WIRING THE ESP32
+on the ESP32 the default Serial (RX/TX) will be for logging and Serial1 is used for heater communication.
+The Adapter will be connected to GROUND / 3.3V / RX / TX of Serial1
+
+
+# HTTP ENDPOINTS
+/ will show you a status page with a lot of technical details
+/getCurrentRoomTemperature returns the current room temperature set
+/getDesiredRoomTemperature returns the desired room temperature set
