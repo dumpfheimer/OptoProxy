@@ -107,13 +107,13 @@ bool read(Stream &s, uint8_t *c, long timeout) {
 bool read(Stream &s, uint8_t *c) {
     return read(s, c, 20);
 }
-void readTelegram(OptolinkTelegram* telegram) {
+void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     println("readTelegram");
     if (telegram == nullptr) return;
     telegram->reset();
 
     uint8_t charBuffer;
-    if (!read(OPTOLINK_SERIAL, &charBuffer, 500)) {
+    if (!read(OPTOLINK_SERIAL, &charBuffer, timeout)) {
         telegram->setError(TIMEOUT);
         return;
     }
@@ -145,8 +145,12 @@ void readTelegram(OptolinkTelegram* telegram) {
     print("readTelegram finished");
     //telegram->print();
 }
+void readTelegram(OptolinkTelegram* telegram) {
+    readTelegram(telegram, 500);
+}
 
-void readUsefulTelegram(OptolinkTelegram* telegram) {
+void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
+    unsigned long start = millis();
     readTelegram(telegram);
     println(telegram->getCmd());
     /*if (currentTelegram.getCmd() == 0x05) {
@@ -168,7 +172,7 @@ void readUsefulTelegram(OptolinkTelegram* telegram) {
             telegram->writeTo(OPTOLINK_SERIAL);
             readTelegram(telegram);
             if (telegram->getCmd() == 0x06) {
-                return readUsefulTelegram(telegram);
+                return readUsefulTelegram(telegram, timeout - (millis() - start));
             }
         } else {
             println("did not get second ping message");
@@ -176,7 +180,7 @@ void readUsefulTelegram(OptolinkTelegram* telegram) {
     }
     if (telegram->getCmd() == 0x06) {
         // ack
-        return readUsefulTelegram(telegram);
+        return readUsefulTelegram(telegram, timeout - (millis() - start));
     }
 }
 
@@ -263,7 +267,7 @@ bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
     sendTelegram.writeTo(OPTOLINK_SERIAL);
     //sendTelegram.print();
 
-    readUsefulTelegram(&recvTelegram);
+    readUsefulTelegram(&recvTelegram, 2000);
 
     if (recvTelegram.getError() != NONE) {
         switch (recvTelegram.getError()) {
@@ -403,7 +407,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
     print("send done");
 
     print("waiting for telegram");
-    readUsefulTelegram(&recvTelegram);
+    readUsefulTelegram(&recvTelegram, 2000);
     print("got telegram");
 
     if (recvTelegram.getError() != NONE) {
