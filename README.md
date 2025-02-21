@@ -27,7 +27,7 @@ This project runs on ESP8266 and ESP32 and connnects to WiFi and Viessmann Heate
 
 7. Open an issue with the error and hope for help, because things never work out the way you expect it
 
-    https://github.com/dumpfheimer/WiFiVitotrol/issues
+    https://github.com/dumpfheimer/OptoProxy/issues
 
 # WIRING THE ESP8266
 on the ESP8266 the default Serial (RX/TX) will be for logging and a SoftwareSerial is used for heater communication
