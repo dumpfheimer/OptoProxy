@@ -49,6 +49,7 @@ struct DatapointConfig {
     uint8_t len;
     uint16_t factor;
     bool sign;
+    bool hex;
     double val;
 };
 

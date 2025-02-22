@@ -91,6 +91,7 @@ bool waitAvailable(Stream &s, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         if (s.available()) return true;
+        delay(10);
     }
     return s.available();
 }
@@ -107,13 +108,13 @@ bool read(Stream &s, uint8_t *c, long timeout) {
 bool read(Stream &s, uint8_t *c) {
     return read(s, c, 20);
 }
-void readTelegram(OptolinkTelegram* telegram) {
+void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     println("readTelegram");
     if (telegram == nullptr) return;
     telegram->reset();
 
     uint8_t charBuffer;
-    if (!read(OPTOLINK_SERIAL, &charBuffer, 500)) {
+    if (!read(OPTOLINK_SERIAL, &charBuffer, timeout)) {
         telegram->setError(TIMEOUT);
         return;
     }
@@ -145,17 +146,15 @@ void readTelegram(OptolinkTelegram* telegram) {
     print("readTelegram finished");
     //telegram->print();
 }
+void readTelegram(OptolinkTelegram* telegram) {
+    readTelegram(telegram, 500);
+}
 
-void readUsefulTelegram(OptolinkTelegram* telegram) {
-    readTelegram(telegram);
+void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
+    unsigned long start = millis();
+    readTelegram(telegram, timeout - (millis() - start));
     println(telegram->getCmd());
-    /*if (currentTelegram.getCmd() == 0x05) {
-        // ping
-        currentTelegram.reset();
-        currentTelegram.setCmd(0x04);
-        currentTelegram.writeTo(OPTOLINK_SERIAL);
-        return readUsefulTelegram();
-    }*/
+
     if (telegram->getCmd() == 0x05) {
         println("got ping msg");
         // ping
@@ -168,7 +167,7 @@ void readUsefulTelegram(OptolinkTelegram* telegram) {
             telegram->writeTo(OPTOLINK_SERIAL);
             readTelegram(telegram);
             if (telegram->getCmd() == 0x06) {
-                return readUsefulTelegram(telegram);
+                return readUsefulTelegram(telegram, timeout - (millis() - start));
             }
         } else {
             println("did not get second ping message");
@@ -176,27 +175,26 @@ void readUsefulTelegram(OptolinkTelegram* telegram) {
     }
     if (telegram->getCmd() == 0x06) {
         // ack
-        return readUsefulTelegram(telegram);
+        return readUsefulTelegram(telegram, timeout - (millis() - start));
     }
 }
 
 bool loopOptolink() {
     if (!OPTOLINK_SERIAL.available()) return false;
     OptolinkTelegram loopTelegram;
-    OPTOLINK_SERIAL.setTimeout(50);
     readTelegram(&loopTelegram);
     println("read a telegram in loop");
     print(loopTelegram.getCmd());
     if (loopTelegram.getCmd() == 0x05) {
-        while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+        while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
         OPTOLINK_SERIAL.write(0x04);
         println("waiting for second telegram");
-        waitAvailable(OPTOLINK_SERIAL, 2000);
+        waitAvailable(OPTOLINK_SERIAL, 300);
         readTelegram(&loopTelegram);
         println("read second telegram");
         if (loopTelegram.getCmd() == 0x05) {
             println("was 05 too");
-            while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+            while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
             loopTelegram.reset();
             loopTelegram.setCmd(0x16);
             loopTelegram.writeTo(OPTOLINK_SERIAL);
@@ -204,7 +202,7 @@ bool loopOptolink() {
             println("read third telegram");
             if (loopTelegram.getCmd() == 0x06) {
                 println("was 06, handshake completed");
-                while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+                while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
                 return true;
             }
         }
@@ -213,37 +211,62 @@ bool loopOptolink() {
 }
 
 bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
-    uint32_t data = 0;
-    for (int16_t i = config->len - 1; i >= 0; i--) {
-        data <<= 8;
-        data |= dataBuffer[i];
-    }
-    double val = 0;
-    if (!config->sign) {
-        val = (double) data;
-    } else {
-        // please dont ask about this i have know idea what i did here =)
-        // seems to work, though
-        // what should be happening:
-        // if the data is signed and starts with a 1, convert it to int rather than uint
-        uint32_t x = 0b10000000;
-        x <<= (config->len - 1) * 8;
-        if (data & x) {
-            data ^= x;
-            int32_t signeddata = (int32_t) data;
-            uint32_t keep = 0x0;
-            for (uint8_t i = 0; i < config->len; i++) keep = keep << 8 | 0xFF;
-            signeddata &= keep;
-            signeddata ^= keep;
-            signeddata ^= x;
-            signeddata = signeddata + 1,
-            val = (double) -signeddata;
+    config->val = 0;
+    if (config->len == 1) {
+        if (config->sign) {
+            int8_t d = 0 | dataBuffer[0];
+            config->val = d;
         } else {
-            val = (double) data;
+            uint8_t d = 0 | dataBuffer[0];
+            config->val = d;
+        }
+    } else if (config->len == 2) {
+        if (config->sign) {
+            int16_t d = 0 | dataBuffer[0] | (dataBuffer[1] << 8);
+            config->val = d;
+        } else {
+            uint16_t d = 0 | dataBuffer[0] | (dataBuffer[1] << 8);
+            config->val = d;
+        }
+    } else if (config->len == 4) {
+        if (config->sign) {
+            int32_t d = 0 | dataBuffer[0] | (dataBuffer[1] << 8) | (dataBuffer[2] << 16) | (dataBuffer[3] << 24);
+            config->val = d;
+        } else {
+            uint32_t d = 0 | dataBuffer[0] | (dataBuffer[1] << 8) | (dataBuffer[2] << 16) | (dataBuffer[3] << 24);
+            config->val = d;
+        }
+    } else {
+        uint32_t data = 0;
+        for (int16_t i = config->len - 1; i >= 0; i--) {
+            data <<= 8;
+            data |= dataBuffer[i];
+        }
+        if (!config->sign) {
+            config->val = (double) data;
+        } else {
+            // please dont ask about this i have know idea what i did here =)
+            // seems to work, though
+            // what should be happening:
+            // if the data is signed and starts with a 1, convert it to int rather than uint
+            uint32_t x = 0b10000000;
+            x <<= (config->len - 1) * 8;
+            if (data & x) {
+                data ^= x;
+                int32_t signeddata = (int32_t) data;
+                uint32_t keep = 0x0;
+                for (uint8_t i = 0; i < config->len; i++) keep = keep << 8 | 0xFF;
+                signeddata &= keep;
+                signeddata ^= keep;
+                signeddata ^= x;
+                signeddata = signeddata + 1,
+                config->val = (double) -signeddata;
+            } else {
+                config->val = (double) data;
+            }
         }
     }
-    if (config->factor != 0) val /= config->factor;
-    config->val = val;
+    if (config->factor != 0) config->val /= config->factor;
     return true;
 }
 
@@ -263,7 +286,7 @@ bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
     sendTelegram.writeTo(OPTOLINK_SERIAL);
     //sendTelegram.print();
 
-    readUsefulTelegram(&recvTelegram);
+    readUsefulTelegram(&recvTelegram, 500);
 
     if (recvTelegram.getError() != NONE) {
         switch (recvTelegram.getError()) {
@@ -301,15 +324,26 @@ bool readToBufferUnsynchronized(char* buffer, DatapointConfig *config) {
             sprintf(buffer, "RESPONSE_BYTES_MISMATCH");
             return false;
         }
-        //factorTest(recvTelegram.getData() + 5, expectBytes, factor, sign, val);
-        if (!convertData(config, recvTelegram.getData() + 5)) {
-            sprintf(buffer, "DATA_CONVERSION_FAILED");
-            return false;
+        if (config->hex) {
+            buffer[0] = '0';
+            buffer[1] = 'x';
+            char* buffPtr = buffer + 2;
+            for (uint8_t i = 0; i < config->len; i++) {
+                uint8_t data = recvTelegram.getData()[i + 5];
+                buffPtr += sprintf(buffPtr, "%02X", data);
+            }
+            return true;
+        } else {
+            //factorTest(recvTelegram.getData() + 5, expectBytes, factor, sign, val);
+            if (!convertData(config, recvTelegram.getData() + 5)) {
+                sprintf(buffer, "DATA_CONVERSION_FAILED");
+                return false;
+            }
+            print("val is (end) ");
+            print(config->val);
+            sprintf(buffer, "%.2f", config->val);
+            return true;
         }
-        print("val is (end) ");
-        print(config->val);
-        sprintf(buffer, "%.2f", config->val);
-        return true;
     } else {
         print("not 41");
         sprintf(buffer, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
@@ -403,7 +437,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, DatapointC
     print("send done");
 
     print("waiting for telegram");
-    readUsefulTelegram(&recvTelegram);
+    readUsefulTelegram(&recvTelegram, 500);
     print("got telegram");
 
     if (recvTelegram.getError() != NONE) {

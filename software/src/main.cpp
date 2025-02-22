@@ -13,6 +13,7 @@ void setup() {
 
     setupLogging();
     println("hello! logging started");
+    OPTOLINK_SERIAL.setTimeout(50);
 
     wifiMgrExpose(&server);
 #ifdef WIFI_SSID

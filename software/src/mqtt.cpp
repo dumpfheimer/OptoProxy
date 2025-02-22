@@ -96,6 +96,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     if (strcmp(topic, "optoproxy/request") == 0) {
         DatapointConfig config;
         config.sign = false;
+        config.hex = false;
         config.factor = 1;
         config.addr = 0;
         config.len = 0;
@@ -136,6 +137,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             } else if (i == 3) {
                 // len
                 if (strcmp(part, "yes") == 0 || strcmp(part, "on")) config.sign = true;
+                if (strcmp(part, "hex") == 0) config.hex = true;
             }
             part = strtok(nullptr, ":"); // Extract the next token
             i++;

@@ -14,7 +14,9 @@ bool getDatapointConfig(DatapointConfig *config) {
     config->len = 0;
     config->factor = 1;
     config->sign = false;
+    config->hex = false;
 
+    if (server.hasArg("hex")) config->hex = true;
     if (server.hasArg("conv")) {
         if (server.arg("conv") == "raw") {
             config->len = 4;
