@@ -72,7 +72,7 @@ void mqttReconnect() {
             const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");
             if (MQTT_PASS == nullptr) return;
 #endif
-            if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
+            if (!client.connect(WiFi.getHostname(), MQTT_USER, MQTT_PASS)) {
                 Serial.print("failed, rc=");
                 Serial.print(client.state());
                 Serial.println(" retrying in 5 seconds");

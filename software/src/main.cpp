@@ -19,7 +19,7 @@ void setup() {
 #ifdef WIFI_SSID
     setupWifi(WIFI_SSID, WIFI_PASSWORD, WIFI_HOSTNAME);
 #else
-    wifiMgrPortalSetup(false);
+    wifiMgrPortalSetup(false, "OptoProxy-", "p0rtal123");
 #endif
 
     setupHttp();
