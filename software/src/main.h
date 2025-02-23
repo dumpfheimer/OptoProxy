@@ -21,6 +21,8 @@
 #define LOGGING_SERIAL Serial
 #define OPTOLINK_SERIAL softwareSerial
 extern SoftwareSerial softwareSerial;
+#define OPTOLINK_SERIAL_RX D4
+#define OPTOLINK_SERIAL_TX D0
 #endif
 #ifdef ESP32
 #define OPTOLINK_SERIAL_RX 3

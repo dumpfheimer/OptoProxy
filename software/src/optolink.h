@@ -54,7 +54,7 @@ struct DatapointConfig {
 };
 
 bool loopOptolink();
-bool readToBuffer(char* buffer, DatapointConfig *config);
-bool writeFromString(const String& value, char* buffer, DatapointConfig *config);
+bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config);
+bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
 
 #endif //SOFTWARE_OPTOLINK_H

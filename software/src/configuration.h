@@ -6,14 +6,7 @@
 #define SOFTWARE_CONFIGURATION_H
 
 #define WIFI_MGR_EEPROM_START_ADDR 0
-//#define USE_LOGGING
-
-//#define WIFI_SSID "XXXX"
-//#define WIFI_PASSWORD "XXXX"
-//#define WIFI_HOSTNAME "XXXX"
-
-//#define MQTT_HOST "192.168.X.X"
-//#define MQTT_USER "XXXX"
-//#define MQTT_PASS "XXXX"
+#define WIFI_MGR_EEPROM_SIZE 1024
+#define USE_LOGGING
 
 #endif //SOFTWARE_CONFIGURATION_H

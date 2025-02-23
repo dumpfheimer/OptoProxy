@@ -18,9 +18,9 @@
 #endif
 
 void setupLogging();
-void print(String s);
+void print(const String& s);
 void print(float f);
-void println(String s);
+void println(const String& s);
 void println(float f);
 void println();
 

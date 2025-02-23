@@ -86,9 +86,9 @@ void mqttReconnect() {
 }
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
-    if (length > 31) return;
+    if (length > MQTT_VALUE_BUFFER_SIZE - 2) return;
     unsigned int i;
-    for (i = 0; i < length; i++) receiveBuffer[i] = (char) payload[i];
+    for (i = 0; i < length && i < MQTT_VALUE_BUFFER_SIZE - 1; i++) receiveBuffer[i] = (char) payload[i];
     receiveBuffer[i] = '\0';
     char *part = strtok(receiveBuffer, ":");
     i = 0;
@@ -142,11 +142,13 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             part = strtok(nullptr, ":"); // Extract the next token
             i++;
         }
-        readToBuffer(receiveBuffer, &config);
+        readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, &config);
 
-        strcpy(topicBuffer, "optoproxy/value/0x");
-        sprintf(&topicBuffer[18], "%04X", config.addr);
-        client.publish(topicBuffer, receiveBuffer, false);
+        char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
+        if (tmpBuffer == nullptr) return;
+        strncpy(tmpBuffer, "optoproxy/value/0x", 18);
+        snprintf(&tmpBuffer[18], 4, "%04X", config.addr);
+        client.publish(tmpBuffer, receiveBuffer, false);
     }
 }
 
@@ -219,15 +221,15 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
 }
 volatile bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
-    while (mqttLock) delay(1);
+    while (mqttLock) delay(10);
     mqttLock = true;
-    strcpy(topicBuffer, "optoproxy/value/0x");
-    strcpy(&topicBuffer[18], this->hexAddress);
+    strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
+    strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
     bool ret = client.publish(topicBuffer, newValue, true);
     client.loop();
     if (ret) {
         this->lastSend = millis();
-        strcpy(this->lastValue, newValue);
+        strncpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
     }
     mqttLock = false;
     return ret;
@@ -239,7 +241,7 @@ void MqttDatapoint::loop() {
     config.len = this->length;
     config.factor = this->factor;
     config.sign = this->sign;
-    if (readToBuffer(valueBuffer, &config)) {
+    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, &config)) {
         this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
     }
 }

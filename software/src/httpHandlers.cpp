@@ -59,7 +59,7 @@ bool getDatapointConfig(DatapointConfig *config) {
     return true;
 }
 
-char *httpBuffer = new char[64];
+char *httpBuffer = new char[HTTP_BUFFER_SIZE];
 void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
@@ -76,7 +76,7 @@ void handleRead() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        if (readToBuffer(httpBuffer, config)) {
+        if (readToBuffer(httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
@@ -100,7 +100,7 @@ void handleWrite() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        if (writeFromString(server.arg("val"), httpBuffer, config)) {
+        if (writeFromString(server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
