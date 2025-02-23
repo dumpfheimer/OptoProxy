@@ -151,6 +151,7 @@ void readTelegram(OptolinkTelegram* telegram) {
 }
 
 void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
+    telegram->reset();
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         readTelegram(telegram, timeout - (millis() - start));
@@ -193,7 +194,7 @@ bool loopOptolink() {
         while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
         OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
         println("waiting for second telegram");
-        waitAvailable(OPTOLINK_SERIAL, 300);
+        waitAvailable(OPTOLINK_SERIAL, 2500);
         readTelegram(&loopTelegram);
         println("read second telegram");
         if (loopTelegram.getCmd() == PING_REQUEST) {
@@ -412,7 +413,6 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
         return false;
     }
     println("can write");
-    delay(100);
 
     loopOptolink();
 
@@ -441,7 +441,6 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     print("send done");
 
     print("waiting for telegram");
-    delay(100);
     readUsefulTelegram(&recvTelegram, 500);
     print("got telegram");
 
@@ -511,6 +510,7 @@ bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, Dat
     println("waiting for lock");
     while (link_locked) delay(1);
     link_locked = true;
+    // when i remove println and delay writes fail?! why??? leaving it in for now..
     println("lock acquired");
     delay(10);
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
