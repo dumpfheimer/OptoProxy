@@ -109,7 +109,7 @@ bool read(Stream &s, uint8_t *c) {
     return read(s, c, 20);
 }
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
-    println("readTelegram");
+    //println("readTelegram");
     if (telegram == nullptr) return;
     telegram->reset();
 
@@ -119,9 +119,9 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
         return;
     }
     telegram->setCmd(charBuffer);
-    if (telegram->getCmd() == 0x05) return;
-    if (telegram->getCmd() == 0x06) return;
-    if (telegram->getCmd() == 0x15) return;
+    if (telegram->getCmd() == PING_REQUEST) return;
+    if (telegram->getCmd() == ACK) return;
+    if (telegram->getCmd() == NACK) return;
     if (!read(OPTOLINK_SERIAL, &charBuffer)) {
         telegram->setError(TIMEOUT);
         return;
@@ -152,33 +152,35 @@ void readTelegram(OptolinkTelegram* telegram) {
 
 void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     unsigned long start = millis();
-    readTelegram(telegram, timeout - (millis() - start));
-    println(telegram->getCmd());
+    while ((millis() - start) < timeout) {
+        readTelegram(telegram, timeout - (millis() - start));
+        println(telegram->getCmd());
 
-    if (telegram->getCmd() == 0x05) {
-        println("got ping msg");
-        // ping
-        OPTOLINK_SERIAL.write(0x04);
-        // this seems bad
-        // it only works after the ESP dies and restarts. then the heater will communicate again
-        readTelegram(telegram, 2500);
-        if (telegram->getCmd() == 0x05) {
-            println("got second ping");
-            telegram->reset();
-            telegram->setCmd(0x16);
-            telegram->writeTo(OPTOLINK_SERIAL);
-            readTelegram(telegram);
-            if (telegram->getCmd() == 0x06) {
-                return readUsefulTelegram(telegram, timeout - (millis() - start));
+        if (telegram->getCmd() == PING_REQUEST) {
+            println("got ping msg");
+            // ping
+            OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
+            // this seems bad
+            // it only works after the ESP dies and restarts. then the heater will communicate again
+            readTelegram(telegram, 2500);
+            if (telegram->getCmd() == PING_REQUEST) {
+                println("got second ping");
+                telegram->reset();
+                telegram->setCmd(BEGIN_COMMUNICATION);
+                telegram->writeTo(OPTOLINK_SERIAL);
+                readTelegram(telegram);
+            } else {
+                println("did not get second ping message");
             }
+        } else if (telegram->getCmd() == ACK) {
+            println("got ack msg");
+            // ack
+            //return readUsefulTelegram(telegram, timeout - (millis() - start));
         } else {
-            println("did not get second ping message");
+            return;
         }
     }
-    if (telegram->getCmd() == 0x06) {
-        // ack
-        return readUsefulTelegram(telegram, timeout - (millis() - start));
-    }
+    telegram->setError(TIMEOUT);
 }
 
 bool loopOptolink() {
@@ -187,22 +189,22 @@ bool loopOptolink() {
     readTelegram(&loopTelegram);
     println("read a telegram in loop");
     print(loopTelegram.getCmd());
-    if (loopTelegram.getCmd() == 0x05) {
+    if (loopTelegram.getCmd() == PING_REQUEST) {
         while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-        OPTOLINK_SERIAL.write(0x04);
+        OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
         println("waiting for second telegram");
         waitAvailable(OPTOLINK_SERIAL, 300);
         readTelegram(&loopTelegram);
         println("read second telegram");
-        if (loopTelegram.getCmd() == 0x05) {
+        if (loopTelegram.getCmd() == PING_REQUEST) {
             println("was 05 too");
             while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
             loopTelegram.reset();
-            loopTelegram.setCmd(0x16);
+            loopTelegram.setCmd(BEGIN_COMMUNICATION);
             loopTelegram.writeTo(OPTOLINK_SERIAL);
             readTelegram(&loopTelegram);
             println("read third telegram");
-            if (loopTelegram.getCmd() == 0x06) {
+            if (loopTelegram.getCmd() == ACK) {
                 println("was 06, handshake completed");
                 while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
                 return true;
@@ -279,9 +281,9 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
     OptolinkTelegram recvTelegram;
 
     sendTelegram.reset();
-    sendTelegram.setCmd(0x41);
-    sendTelegram.pushData(0x00);
-    sendTelegram.pushData(0x01);
+    sendTelegram.setCmd(DATA_REQUEST);
+    sendTelegram.pushData(REQUEST);
+    sendTelegram.pushData(READ);
     sendTelegram.pushData(config->addr >> 8);
     sendTelegram.pushData(config->addr & 0xFF);
     sendTelegram.pushData(config->len);
@@ -300,15 +302,14 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
                 snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram.getCalculatedCrc());
                 snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram.getCrc());
                 return false;
-                break;
             default:
                 snprintf(buffer, buffer_len, "UNKNOWN");
                 return false;
         }
     }
-    if (recvTelegram.cmd == (uint8_t) 0x41) {
-        if (recvTelegram.getData()[0] != 0x01 ||
-            recvTelegram.getData()[1] != 0x01) {
+    if (recvTelegram.cmd == (uint8_t) DATA_REQUEST) {
+        if (recvTelegram.getData()[0] != RESPONSE ||
+            recvTelegram.getData()[1] != READ) {
             snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram.getData()[0], recvTelegram.getData()[1]);
             return false;
         }
@@ -410,6 +411,8 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
         if (buffer != nullptr) strncpy(buffer, "INVALID_ADDRESS", buffer_len);
         return false;
     }
+    println("can write");
+    delay(100);
 
     loopOptolink();
 
@@ -417,9 +420,9 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     OptolinkTelegram recvTelegram;
 
     sendTelegram.reset();
-    sendTelegram.setCmd(0x41);
-    sendTelegram.pushData(0x00);
-    sendTelegram.pushData(0x02);
+    sendTelegram.setCmd(DATA_REQUEST);
+    sendTelegram.pushData(REQUEST);
+    sendTelegram.pushData(WRITE);
     sendTelegram.pushData(config->addr >> 8);
     sendTelegram.pushData(config->addr & 0xFF);
     sendTelegram.pushData(config->len);
@@ -438,6 +441,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     print("send done");
 
     print("waiting for telegram");
+    delay(100);
     readUsefulTelegram(&recvTelegram, 500);
     print("got telegram");
 
@@ -457,9 +461,9 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
                 return false;
         }
     }
-    if (recvTelegram.cmd == (uint8_t) 0x41) {
-        if (recvTelegram.getData()[0] != 0x01 ||
-            recvTelegram.getData()[1] != 0x02) {
+    if (recvTelegram.cmd == (uint8_t) DATA_REQUEST) {
+        if (recvTelegram.getData()[0] != RESPONSE ||
+            recvTelegram.getData()[1] != WRITE) {
             snprintf(buffer, buffer_len, "INV_CMD %02X %02X ", recvTelegram.getData()[0], recvTelegram.getData()[1]);
             printf("INV_CMD");
             recvTelegram.print();
@@ -504,8 +508,11 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
 }
 
 bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    println("waiting for lock");
     while (link_locked) delay(1);
     link_locked = true;
+    println("lock acquired");
+    delay(10);
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
     link_locked = false;
     return ret;
