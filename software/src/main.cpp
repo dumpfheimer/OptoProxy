@@ -3,7 +3,7 @@
 
 XWebServer server(80);
 #if defined(ESP8266)
-SoftwareSerial softwareSerial(D4, D5);
+SoftwareSerial softwareSerial(OPTOLINK_SERIAL_RX, OPTOLINK_SERIAL_TX);
 #endif
 
 void setup() {
@@ -19,7 +19,7 @@ void setup() {
 #ifdef WIFI_SSID
     setupWifi(WIFI_SSID, WIFI_PASSWORD, WIFI_HOSTNAME);
 #else
-    wifiMgrPortalSetup(false);
+    wifiMgrPortalSetup(false, "OptoProxy-", "p0rtal123");
 #endif
 
     setupHttp();
@@ -38,6 +38,8 @@ void setup() {
     OPTOLINK_SERIAL.begin(4800, SWSERIAL_8E2);
 #elif defined(ESP32)
     OPTOLINK_SERIAL.begin(4800, SERIAL_8E2);
+#else
+#error "not supported"
 #endif
 
     mqttSetup();

@@ -12,7 +12,7 @@ void setupLogging() {
   #endif
 }
 
-void print(String s) {
+void print(const String& s) {
   #ifdef USE_LOGGING
     LOGGING_SERIAL.print(s);
   #endif
@@ -25,7 +25,7 @@ void print(float f) {
 }
 
 
-void println(String s) {
+void println(const String& s) {
   #ifdef USE_LOGGING
     LOGGING_SERIAL.println(s);
   #endif
