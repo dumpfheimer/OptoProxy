@@ -52,17 +52,17 @@ void connectToWifi() {
 
     wifiMgrScanCount++;
 
-    int n = WiFi.scanNetworks(true, false);
+    int n = WiFi.scanNetworks(true, false, 0);
 
     unsigned long waitForScanStart = millis();
 
-    while (WiFi.scanComplete() == -1 && (millis() - waitForScanStart) < wifiMgrWaitForScanMs) {
+    while (WiFi.scanComplete() < 0 && (millis() - waitForScanStart) < wifiMgrWaitForScanMs) {
         if (loopFunctionPointer != nullptr) loopFunctionPointer();
         delay(10);
     }
     n = WiFi.scanComplete();
 
-    if (n != -1) {
+    if (n > 0) {
         String ssid;
         uint8_t encryptionType;
         int32_t RSSI;
@@ -97,27 +97,27 @@ void connectToWifi() {
             if (!waitForWifi(wifiMgrWaitForConnectMs)) {
                 WiFi.disconnect(true);
                 WiFi.mode(WIFI_OFF);
-		wifiMgrUnsuccessfullTries += 1;
-		if (wifiMgrUnsuccessfullTries >= wifiMgrRebootAfterUnsuccessfullTries) {
-		    ESP.restart();
-		}
+		        wifiMgrUnsuccessfullTries += 1;
+		        if (wifiMgrUnsuccessfullTries >= wifiMgrRebootAfterUnsuccessfullTries) {
+		            ESP.restart();
+		        }
             } else {
-		wifiMgrUnsuccessfullTries = 0;
-#ifdef ESP8266
-		if (wifiMgrHN != nullptr) {
-
+		        wifiMgrUnsuccessfullTries = 0;
+		        if (wifiMgrHN != nullptr) {
 #if defined(ESP8266)
                     if (wifiMgrMdns.isRunning()) wifiMgrMdns.end();
                     wifiMgrMdns.begin(wifiMgrHN, WiFi.localIP());
 #elif defined(ESP32)
-		    mdns_init();
-		    mdns_hostname_set(wifiMgrHN);
+		            mdns_init();
+		            mdns_hostname_set(wifiMgrHN);
 #endif
-		}
+		        }
+#if defined(ESP32)
+                if (wifiMgrServer != nullptr) wifiMgrServer->begin();
 #endif
                 wifiMgrLastNonShitRSS = millis();
             }
-	}
+	    }
     }
 }
 
@@ -133,13 +133,11 @@ void setupWifi(const char* SSID, const char* password, const char* hostname, uns
     setupWifi(SSID, password, hostname, tolerateBadRSSms, waitForConnectMs, wifiMgrWaitForScanMs, wifiMgrRescanInterval);
 }
 
-#ifdef ElegantOTA_h
 void onOTAEnd(bool success) {
   if (success) {
     ESP.restart();
   }
 }
-#endif
 
 void setupWifi(const char* SSID, const char* password, const char* hostname, unsigned long tolerateBadRSSms, unsigned long waitForConnectMs, unsigned long waitForScanMs, unsigned long rescanInterval) {
     WiFi.mode(WIFI_STA);
@@ -165,11 +163,6 @@ void setupWifi(const char* SSID, const char* password, const char* hostname, uns
     wifiMgrRescanInterval = rescanInterval;
 
     connectToWifi();
-
-
-#ifdef ElegantOTA_h
-    ElegantOTA.onEnd(onOTAEnd);
-#endif
 }
 
 void loopWifi() {
@@ -235,6 +228,8 @@ void wifiMgrExpose(XWebServer *wifiMgrServer_) {
     wifiMgrServer->on("/wifiMgr/bssid", bssid);
     wifiMgrServer->on("/wifiMgr/status", status);
     wifiMgrServer->on("/wifiMgr/restart", restart);
+
+    ElegantOTA.begin(wifiMgrServer);
 }
 
 XWebServer* wifiMgrGetWebServer() {
