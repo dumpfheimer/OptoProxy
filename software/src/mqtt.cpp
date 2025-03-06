@@ -19,39 +19,39 @@ unsigned long lastConnect = 0 - 5000;
     8 cop 1_10_F
     */
 MqttDatapoint mqttDatapoints[] = {
-        MqttDatapoint(0x0101, 10, 2),
-        MqttDatapoint(0x0106, 10, 2),
-        MqttDatapoint(0x0105, 10, 2),
-        MqttDatapoint(0x0847, 1, 1),
-        MqttDatapoint(0x1800, 10, 2),
-        MqttDatapoint(0x1803, 10, 2),
-        MqttDatapoint(0x010D, 10, 2),
-        MqttDatapoint(0x2006, 10, 2),
-        MqttDatapoint(0x2007, 10, 2),
-        MqttDatapoint(0x7110, 10, 2),
-        MqttDatapoint(0x7111, 10, 2),
-        MqttDatapoint(0x7103, 10, 2),
+        MqttDatapoint(0x0101, 10, 2, true),
+        MqttDatapoint(0x0106, 10, 2, false),
+        MqttDatapoint(0x0105, 10, 2, false),
+        MqttDatapoint(0x0847, 1, 1, false),
+        MqttDatapoint(0x1800, 10, 2, false),
+        MqttDatapoint(0x1803, 10, 2, false),
+        MqttDatapoint(0x010D, 10, 2, false),
+        MqttDatapoint(0x2006, 10, 2, true),
+        MqttDatapoint(0x2007, 10, 2, true),
+        MqttDatapoint(0x7110, 10, 2, true),
+        MqttDatapoint(0x7111, 10, 2, true),
+        MqttDatapoint(0x7103, 10, 2, false),
 
-        MqttDatapoint(0x2000, 10, 2),
-        MqttDatapoint(0x2001, 10, 2),
-        MqttDatapoint(0x0116, 10, 2),
+        MqttDatapoint(0x2000, 10, 2, false),
+        MqttDatapoint(0x2001, 10, 2, false),
+        MqttDatapoint(0x0116, 10, 2, false),
 
-        MqttDatapoint(0xb000, 1, 1),
-        MqttDatapoint(0x0494, 1, 1),
-        MqttDatapoint(0x048d, 1, 1),
-        MqttDatapoint(0x0480, 1, 1),
-        MqttDatapoint(0x04a6, 1, 1),
-        MqttDatapoint(0x2005, 1, 1),
+        MqttDatapoint(0xb000, 1, 1, false),
+        MqttDatapoint(0x0494, 1, 1, false),
+        MqttDatapoint(0x048d, 1, 1, false),
+        MqttDatapoint(0x0480, 1, 1, false),
+        MqttDatapoint(0x04a6, 1, 1, false),
+        MqttDatapoint(0x2005, 1, 1, false),
 
-        MqttDatapoint(0xB020, 1, 1),
-        MqttDatapoint(0x6000, 10, 2),
-        MqttDatapoint(0x600C, 10, 2),
+        MqttDatapoint(0xB020, 1, 1, false),
+        MqttDatapoint(0x6000, 10, 2, false),
+        MqttDatapoint(0x600C, 10, 2, false),
 
-        MqttDatapoint(0xB420, 1, 2),
-        MqttDatapoint(0xB421, 1, 2),
-        MqttDatapoint(0xB422, 1, 2),
-        MqttDatapoint(0xB423, 1, 2),
-        MqttDatapoint(0xB424, 1, 2),
+        MqttDatapoint(0xB420, 1, 2, false),
+        MqttDatapoint(0xB421, 1, 2, false),
+        MqttDatapoint(0xB422, 1, 2, false),
+        MqttDatapoint(0xB423, 1, 2, false),
+        MqttDatapoint(0xB424, 1, 2, false),
 };
 uint16_t mqttDatapointpointer = 0;
 
@@ -72,7 +72,7 @@ void mqttReconnect() {
             const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");
             if (MQTT_PASS == nullptr) return;
 #endif
-            if (!client.connect("OptoProxy", MQTT_USER, MQTT_PASS)) {
+            if (!client.connect(WiFi.getHostname(), MQTT_USER, MQTT_PASS)) {
                 Serial.print("failed, rc=");
                 Serial.print(client.state());
                 Serial.println(" retrying in 5 seconds");
@@ -86,61 +86,69 @@ void mqttReconnect() {
 }
 
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
-    if (length > 31) return;
-    int i;
-    for (i = 0; i < length; i++) receiveBuffer[i] = (char) payload[i];
+    if (length > MQTT_VALUE_BUFFER_SIZE - 2) return;
+    unsigned int i;
+    for (i = 0; i < length && i < MQTT_VALUE_BUFFER_SIZE - 1; i++) receiveBuffer[i] = (char) payload[i];
     receiveBuffer[i] = '\0';
     char *part = strtok(receiveBuffer, ":");
     i = 0;
 
     if (strcmp(topic, "optoproxy/request") == 0) {
-        uint16_t addr = 0;
-        uint8_t len = 0;
-        uint16_t factor = 1;
+        DatapointConfig config;
+        config.sign = false;
+        config.hex = false;
+        config.factor = 1;
+        config.addr = 0;
+        config.len = 0;
 
         while (part != nullptr) {
             if (i == 0) {
                 // addr
-                addr = strtoul(part, nullptr, 16);
+                config.addr = strtoul(part, nullptr, 16);
             } else if (i == 1) {
                 // conv
                 if (strcmp(part, "raw") == 0) {
-                    len = 4;
+                    config.len = 4;
                 } else if (strcmp(part, "temp") == 0) {
-                    factor = 10;
-                    len = 2;
+                    config.factor = 10;
+                    config.len = 2;
                 } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
-                    len = 2;
+                    config.len = 2;
                 } else if (strcmp(part, "stat") == 0) {
-                    len = 1;
+                    config.len = 1;
                 } else if (strcmp(part, "count") == 0) {
-                    len = 4;
+                    config.len = 4;
                 } else if (strcmp(part, "counts") == 0) {
-                    len = 2;
+                    config.len = 2;
                 } else if (strcmp(part, "mode") == 0) {
-                    len = 1;
+                    config.len = 1;
                 } else if (strcmp(part, "hours") == 0) {
-                    factor = 3600;
-                    len = 4;
+                    config.factor = 3600;
+                    config.len = 4;
                 } else if (strcmp(part, "cop") == 0) {
-                    factor = 10;
-                    len = 1;
+                    config.factor = 10;
+                    config.len = 1;
                 } else {
-                    len = 1;
+                    config.len = 1;
                 }
             } else if (i == 2) {
                 // len
-                len = strtoul(part, nullptr, 10);
+                config.len = strtoul(part, nullptr, 10);
+            } else if (i == 3) {
+                // len
+                if (strcmp(part, "yes") == 0 || strcmp(part, "on")) config.sign = true;
+                if (strcmp(part, "hex") == 0) config.hex = true;
             }
             part = strtok(nullptr, ":"); // Extract the next token
             i++;
         }
-        float f;
-        readToBuffer(receiveBuffer, &f, addr, len, factor);
+        readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, &config);
 
-        strcpy(topicBuffer, "optoproxy/value/0x");
-        sprintf(&topicBuffer[18], "%04X", addr);
-        client.publish(topicBuffer, receiveBuffer, false);
+        char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
+        if (tmpBuffer == nullptr) return;
+        strncpy(tmpBuffer, "optoproxy/value/0x", 19);
+        snprintf(&tmpBuffer[18], 5, "%04X", config.addr);
+        client.publish(tmpBuffer, receiveBuffer, false);
     }
 }
 
@@ -181,10 +189,11 @@ void mqttLoop() {
     }
 }
 
-MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length) {
+MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool sign) {
     this->address = address;
     this->factor = factor;
     this->length = length;
+    this->sign = sign;
     this->lastValue[0] = 0;
     this->sendInterval = 30000;
     this->lastSend = 0 - this->sendInterval;
@@ -210,27 +219,31 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
     }
     return false;
 }
-bool mqttLock = false;
+volatile bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
-    while (mqttLock) delay(1);
+    while (mqttLock) delay(10);
     mqttLock = true;
-    strcpy(topicBuffer, "optoproxy/value/0x");
-    strcpy(&topicBuffer[18], this->hexAddress);
+    strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
+    strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
     bool ret = client.publish(topicBuffer, newValue, true);
     client.loop();
     if (ret) {
         this->lastSend = millis();
-        strcpy(this->lastValue, newValue);
+        strncpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
     }
     mqttLock = false;
     return ret;
 }
 
 void MqttDatapoint::loop() {
-    float f;
-    /*if (readToBuffer(valueBuffer, &f, this->address, this->length, this->converter)) {
+    DatapointConfig config;
+    config.addr = this->address;
+    config.len = this->length;
+    config.factor = this->factor;
+    config.sign = this->sign;
+    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, &config)) {
         this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
-    }*/
+    }
 }
 
 bool MqttDatapoint::wantsToSend() const {

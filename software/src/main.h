@@ -14,12 +14,15 @@
 
 #include "configuration.h"
 #include "wifi_mgr.h"
-#include "SoftwareSerial.h"
 
 #ifdef ESP8266
+#include <SoftwareSerial.h>
 // CONFIGURATION FOR ESP8266
-#define LOGGING_SERIAL SoftwareSerial
-#define OPTOLINK_SERIAL Serial
+#define LOGGING_SERIAL Serial
+#define OPTOLINK_SERIAL softwareSerial
+extern SoftwareSerial softwareSerial;
+#define OPTOLINK_SERIAL_RX D4
+#define OPTOLINK_SERIAL_TX D0
 #endif
 #ifdef ESP32
 #define OPTOLINK_SERIAL_RX 3
