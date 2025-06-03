@@ -384,10 +384,12 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     if (config->addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
     if (config->addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
+    if (config->addr == 0x71FE) canWrite = true; // Active Cooling Freigabe
     if (config->addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
     if (config->addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
     if (config->addr == 0x7414) canWrite = true; // Startleistung
     if (config->addr == 0x5006) canWrite = true; // Min. Pausenzeit Verdichter
+    if (config->addr == 0x77FC) canWrite = true; // Aussentemp Quelle
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll
