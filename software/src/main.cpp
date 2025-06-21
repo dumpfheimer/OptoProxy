@@ -28,7 +28,7 @@ void setup() {
 
 #ifdef WIFI_SSID
     while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
+        yield();
     }
     if (!MDNS.begin("OptoProxy")) {
         println("Error setting up MDNS responder!");

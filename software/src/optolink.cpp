@@ -91,7 +91,7 @@ bool waitAvailable(Stream &s, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         if (s.available()) return true;
-        delay(10);
+        yield();
     }
     return s.available();
 }
@@ -353,7 +353,11 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    while (link_locked) delay(1);
+    unsigned long start = millis();
+    unsigned long timeout = 2000;
+    while (link_locked && (millis() - start < timeout)) yield();
+    if (link_locked) return false;
+
     link_locked = true;
     bool ret = readToBufferUnsynchronized(buffer, buffer_len, config);
     link_locked = false;
@@ -506,7 +510,11 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
 }
 
 bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    while (link_locked) delay(1);
+    unsigned long start = millis();
+    unsigned long timeout = 2000;
+    while (link_locked && (millis() - start < timeout)) yield();
+    if (link_locked) return false;
+
     link_locked = true;
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
     link_locked = false;

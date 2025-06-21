@@ -221,7 +221,10 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
 }
 volatile bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
-    while (mqttLock) delay(10);
+    unsigned long start = millis();
+    while (mqttLock && (millis() - start < 2000)) yield();
+    if (mqttLock) return false;
+
     mqttLock = true;
     strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
     strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
