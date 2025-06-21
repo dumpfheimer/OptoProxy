@@ -222,6 +222,4 @@ void setupHttp() {
     server.on("/vorlaufTsoll", handleVorlaufTsoll);
     server.on("/ventilHeizenWW", handleVentilHeizenWW);*/
     server.on("/gpio/write", handleGpioWrite);
-
-    server.begin();
 }

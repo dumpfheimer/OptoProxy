@@ -18,6 +18,7 @@ void setup() {
     wifiMgrExpose(&server);
 #ifdef WIFI_SSID
     setupWifi(WIFI_SSID, WIFI_PASSWORD, WIFI_HOSTNAME);
+    server.begin();
 #else
     wifiMgrConfigureEEPROM(0, 1024);
     wifiMgrPortalSetup(false, "OptoProxy-", "p0rtal123");
@@ -53,7 +54,7 @@ void loop() {
         loopWifi();
 #endif
         loopOptolink();
-        server.handleClient();
+        if (WiFi.isConnected()) server.handleClient();
         mqttLoop();
         loopHttp();
 #ifndef WIFI_SSID
