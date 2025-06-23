@@ -13,6 +13,29 @@ enum OptolinkTelegramError {
     TIMEOUT,
     CRC_ERROR
 };
+
+enum OptolinkCommand {
+    PING_REQUEST = 0x05,
+    RESET_COMMUNICATION = 0x04,
+    BEGIN_COMMUNICATION = 0x16,
+    ACK = 0x06,
+    NACK = 0x15,
+    DATA_REQUEST = 0x41
+};
+
+enum OptolinkDataRequestType {
+    REQUEST = 0x00,
+    RESPONSE = 0x01,
+    RNACK = 0x02,
+    ERROR = 0x03
+};
+
+enum OptolinkDataRequestAction {
+    READ = 0x01,
+    WRITE = 0x02,
+    RPC = 0x07
+};
+
 class OptolinkTelegram {
 public:
     OptolinkTelegram();
