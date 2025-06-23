@@ -19,9 +19,9 @@
 
 void setupLogging();
 void print(const String& s);
-void print(float f);
+void print(double f);
 void println(const String& s);
-void println(float f);
+void println(double f);
 void println();
 
 #ifdef USE_LOGGING

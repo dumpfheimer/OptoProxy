@@ -10,7 +10,7 @@
 #include "main.h"
 
 #define MQTT_TOPIC_BUFFER_SIZE 32
-#define MQTT_VALUE_BUFFER_SIZE 32
+#define MQTT_VALUE_BUFFER_SIZE 16
 
 void mqttSetup();
 void mqttLoop();

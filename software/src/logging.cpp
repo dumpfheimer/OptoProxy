@@ -18,7 +18,7 @@ void print(const String& s) {
   #endif
 }
 
-void print(float f) {
+void print(double f) {
   #ifdef USE_LOGGING
     LOGGING_SERIAL.print(f);
   #endif
@@ -32,7 +32,7 @@ void println(const String& s) {
 }
 
 
-void println(float f) {
+void println(double f) {
   #ifdef USE_LOGGING
     LOGGING_SERIAL.println(f);
   #endif

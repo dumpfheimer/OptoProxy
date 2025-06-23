@@ -4,7 +4,6 @@
 #include "optolink.h"
 
 volatile bool link_locked = false;
-uint8_t crc = 0;
 
 OptolinkTelegram::OptolinkTelegram() {
     this->reset();
@@ -105,9 +104,11 @@ bool read(Stream &s, uint8_t *c, long timeout) {
         return false;
     }
 }
+
 bool read(Stream &s, uint8_t *c) {
     return read(s, c, 20);
 }
+
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     //println("readTelegram");
     if (telegram == nullptr) return;
@@ -187,29 +188,32 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
 
 bool loopOptolink() {
     if (!OPTOLINK_SERIAL.available()) return false;
-    OptolinkTelegram loopTelegram;
-    readTelegram(&loopTelegram);
-    println("read a telegram in loop");
-    print(loopTelegram.getCmd());
-    if (loopTelegram.getCmd() == PING_REQUEST) {
-        while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-        OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
-        println("waiting for second telegram");
-        waitAvailable(OPTOLINK_SERIAL, 2500);
-        readTelegram(&loopTelegram);
-        println("read second telegram");
-        if (loopTelegram.getCmd() == PING_REQUEST) {
-            println("was 05 too");
+
+    OptolinkTelegram *loopTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
+    if (loopTelegram != nullptr) {
+        readTelegram(loopTelegram);
+        println("read a telegram in loop");
+        print(loopTelegram->getCmd());
+        if (loopTelegram->getCmd() == PING_REQUEST) {
             while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-            loopTelegram.reset();
-            loopTelegram.setCmd(BEGIN_COMMUNICATION);
-            loopTelegram.writeTo(OPTOLINK_SERIAL);
-            readTelegram(&loopTelegram);
-            println("read third telegram");
-            if (loopTelegram.getCmd() == ACK) {
-                println("was 06, handshake completed");
+            OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
+            println("waiting for second telegram");
+            waitAvailable(OPTOLINK_SERIAL, 2500);
+            readTelegram(loopTelegram);
+            println("read second telegram");
+            if (loopTelegram->getCmd() == PING_REQUEST) {
+                println("was 05 too");
                 while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-                return true;
+                loopTelegram->reset();
+                loopTelegram->setCmd(BEGIN_COMMUNICATION);
+                loopTelegram->writeTo(OPTOLINK_SERIAL);
+                readTelegram(loopTelegram);
+                println("read third telegram");
+                if (loopTelegram->getCmd() == ACK) {
+                    println("was 06, handshake completed");
+                    while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+                    return true;
+                }
             }
         }
     }
@@ -276,56 +280,74 @@ bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
     return true;
 }
 
-bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, bool retryOnAddrMismatch) {
     loopOptolink();
 
-    OptolinkTelegram sendTelegram;
-    OptolinkTelegram recvTelegram;
+    OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
+    if (sendTelegram == nullptr) {
+        snprintf(buffer, buffer_len, "OOM1");
+        return false;
+    }
 
-    sendTelegram.reset();
-    sendTelegram.setCmd(DATA_REQUEST);
-    sendTelegram.pushData(REQUEST);
-    sendTelegram.pushData(READ);
-    sendTelegram.pushData(config->addr >> 8);
-    sendTelegram.pushData(config->addr & 0xFF);
-    sendTelegram.pushData(config->len);
-    sendTelegram.writeTo(OPTOLINK_SERIAL);
-    //sendTelegram.print();
+    sendTelegram->reset();
+    sendTelegram->setCmd(DATA_REQUEST);
+    sendTelegram->pushData(REQUEST);
+    sendTelegram->pushData(READ);
+    sendTelegram->pushData(config->addr >> 8);
+    sendTelegram->pushData(config->addr & 0xFF);
+    sendTelegram->pushData(config->len);
+    sendTelegram->writeTo(OPTOLINK_SERIAL);
+    //sendTelegram->print();
+    /*free(sendTelegram);
 
-    readUsefulTelegram(&recvTelegram, 500);
+    OptolinkTelegram *recvTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
+    if (recvTelegram == nullptr) {
+        snprintf(buffer, buffer_len, "OOM1");
+        return false;
+    }*/
+    OptolinkTelegram *recvTelegram = sendTelegram;
+    readUsefulTelegram(recvTelegram, 500);
 
-    if (recvTelegram.getError() != NONE) {
-        switch (recvTelegram.getError()) {
+    if (recvTelegram->getError() != NONE) {
+        switch (recvTelegram->getError()) {
             case TIMEOUT:
-                snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+                snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
+                free(recvTelegram);
                 return false;
             case CRC_ERROR:
                 strncpy(buffer, "CRC ", buffer_len);
-                snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram.getCalculatedCrc());
-                snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram.getCrc());
+                snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram->getCalculatedCrc());
+                snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram->getCrc());
+                free(recvTelegram);
                 return false;
             default:
                 snprintf(buffer, buffer_len, "UNKNOWN");
+                free(recvTelegram);
                 return false;
         }
     }
-    if (recvTelegram.cmd == (uint8_t) DATA_REQUEST) {
-        if (recvTelegram.getData()[0] != RESPONSE ||
-            recvTelegram.getData()[1] != READ) {
-            snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram.getData()[0], recvTelegram.getData()[1]);
+    if (recvTelegram->cmd == (uint8_t) DATA_REQUEST) {
+        if (recvTelegram->getData()[0] != RESPONSE ||
+            recvTelegram->getData()[1] != READ) {
+            snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram->getData()[0], recvTelegram->getData()[1]);
+            free(recvTelegram);
+            if (retryOnAddrMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            else return false;
+        }
+        if (recvTelegram->getLen() != (5 + config->len)) {
+            snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram->getLen(), config->len + 5);
+            free(recvTelegram);
             return false;
         }
-        if (recvTelegram.getLen() != (5 + config->len)) {
-            snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram.getLen(), config->len + 5);
+        if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
+            recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
+            snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
+            free(recvTelegram);
             return false;
         }
-        if (recvTelegram.getData()[2] != (uint8_t) (config->addr >> 8) ||
-            recvTelegram.getData()[3] != (uint8_t) (config->addr & 0xFF)) {
-            snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
-            return false;
-        }
-        if (recvTelegram.getData()[4] != config->len) {
+        if (recvTelegram->getData()[4] != config->len) {
             snprintf(buffer, buffer_len, "RESPONSE_BYTES_MISMATCH");
+            free(recvTelegram);
             return false;
         }
         if (config->hex) {
@@ -334,26 +356,33 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
             buffer[2] = 0;
             uint16_t offset = 2;
             for (uint8_t i = 0; i < config->len; i++) {
-                uint8_t data = recvTelegram.getData()[i + 5];
+                uint8_t data = recvTelegram->getData()[i + 5];
                 offset += snprintf(buffer + offset, buffer_len - offset, "%02X", data);
             }
+            free(recvTelegram);
             return true;
         } else {
-            //factorTest(recvTelegram.getData() + 5, expectBytes, factor, sign, val);
-            if (!convertData(config, recvTelegram.getData() + 5)) {
+            //factorTest(recvTelegram->getData() + 5, expectBytes, factor, sign, val);
+            if (!convertData(config, recvTelegram->getData() + 5)) {
                 snprintf(buffer, buffer_len, "DATA_CONVERSION_FAILED");
                 return false;
             }
             print("val is (end) ");
             print(config->val);
             snprintf(buffer, buffer_len, "%.2f", config->val);
+            free(recvTelegram);
             return true;
         }
     } else {
         print("not 41");
-        snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+        snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
+        free(recvTelegram);
         return false;
     }
+}
+
+bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    return readToBufferUnsynchronized(buffer, buffer_len, config, true);
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
@@ -425,16 +454,19 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
 
     loopOptolink();
 
-    OptolinkTelegram sendTelegram;
-    OptolinkTelegram recvTelegram;
+    OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
+    if (sendTelegram == nullptr) {
+        snprintf(buffer, buffer_len, "OOM1");
+        return false;
+    }
 
-    sendTelegram.reset();
-    sendTelegram.setCmd(DATA_REQUEST);
-    sendTelegram.pushData(REQUEST);
-    sendTelegram.pushData(WRITE);
-    sendTelegram.pushData(config->addr >> 8);
-    sendTelegram.pushData(config->addr & 0xFF);
-    sendTelegram.pushData(config->len);
+    sendTelegram->reset();
+    sendTelegram->setCmd(DATA_REQUEST);
+    sendTelegram->pushData(REQUEST);
+    sendTelegram->pushData(WRITE);
+    sendTelegram->pushData(config->addr >> 8);
+    sendTelegram->pushData(config->addr & 0xFF);
+    sendTelegram->pushData(config->len);
 
     double writeValue = value.toDouble();
     println("write value");
@@ -444,74 +476,93 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     for (uint8_t i = 0; i < config->len; i++) {
         //uint8_t push = write >> (expectBytes - 1 - i) * 8 & 0xFF;
         uint8_t push = write >> (i) * 8 & 0xFF;
-        sendTelegram.pushData(push);
+        sendTelegram->pushData(push);
     }
 
-    sendTelegram.writeTo(OPTOLINK_SERIAL);
+    sendTelegram->writeTo(OPTOLINK_SERIAL);
+    /*free(sendTelegram);
+
+    OptolinkTelegram *recvTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
+    if (recvTelegram == nullptr) {
+        snprintf(buffer, buffer_len, "OOM2");
+        return false;
+    }*/
+    OptolinkTelegram *recvTelegram = sendTelegram;
     print("send done");
 
     print("waiting for telegram");
-    readUsefulTelegram(&recvTelegram, 500);
+    readUsefulTelegram(recvTelegram, 500);
     print("got telegram");
 
-    if (recvTelegram.getError() != NONE) {
-        switch (recvTelegram.getError()) {
+    if (recvTelegram->getError() != NONE) {
+        switch (recvTelegram->getError()) {
             case TIMEOUT:
-                snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
+                snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
+                free(recvTelegram);
                 return false;
             case CRC_ERROR:
                 strncpy(buffer, "CRC ", buffer_len);
-                snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram.getCalculatedCrc());
-                snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram.getCrc());
+                snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram->getCalculatedCrc());
+                snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram->getCrc());
+                free(recvTelegram);
                 return false;
             default:
                 snprintf(buffer, buffer_len, "UNKNOWN");
+                free(recvTelegram);
                 return false;
         }
     }
-    if (recvTelegram.cmd == (uint8_t) DATA_REQUEST) {
-        if (recvTelegram.getData()[0] != RESPONSE ||
-            recvTelegram.getData()[1] != WRITE) {
-            snprintf(buffer, buffer_len, "INV_CMD %02X %02X ", recvTelegram.getData()[0], recvTelegram.getData()[1]);
+    if (recvTelegram->cmd == (uint8_t) DATA_REQUEST) {
+        if (recvTelegram->getData()[0] != RESPONSE ||
+            recvTelegram->getData()[1] != WRITE) {
+            snprintf(buffer, buffer_len, "INV_CMD %02X %02X ", recvTelegram->getData()[0], recvTelegram->getData()[1]);
             printf("INV_CMD");
-            recvTelegram.print();
+            recvTelegram->print();
+            free(recvTelegram);
             return false;
         }
-        if (recvTelegram.getLen() != 5) {
-            snprintf(buffer, buffer_len, "INV_LEN %d != %d", recvTelegram.getLen(), 5);
+        if (recvTelegram->getLen() != 5) {
+            snprintf(buffer, buffer_len, "INV_LEN %d != %d", recvTelegram->getLen(), 5);
             printf("INV_LEN");
-            recvTelegram.print();
+            recvTelegram->print();
+            free(recvTelegram);
             return false;
         }
-        if (recvTelegram.getData()[2] != (uint8_t) (config->addr >> 8) ||
-            recvTelegram.getData()[3] != (uint8_t) (config->addr & 0xFF)) {
-            snprintf(buffer, buffer_len, "INV_ADDR %02X %02X != %02X %02X", recvTelegram.getData()[2], recvTelegram.getData()[3], config->addr >> 8, config->addr & 0xFF);
+        if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
+            recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
+            snprintf(buffer, buffer_len, "INV_ADDR %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
             printf("INV_ADDR");
-            recvTelegram.print();
+            recvTelegram->print();
+            free(recvTelegram);
             return false;
         }
-        if (recvTelegram.getData()[4] != config->len) {
+        if (recvTelegram->getData()[4] != config->len) {
             snprintf(buffer, buffer_len, "INV_LEN2");
             printf("INV_LEN2");
-            recvTelegram.print();
+            recvTelegram->print();
+            free(recvTelegram);
             return false;
         }
         //double writeVal = value.toDouble();
         if (!readToBufferUnsynchronized(buffer, buffer_len, config)) {
             strncpy(buffer, "READ_BACK_FAILED", buffer_len);
+            free(recvTelegram);
             return false;
         }
         if (config->val == writeValue) {
             //strncpy(buffer, "OK", buffer_len);
+            free(recvTelegram);
             return true;
         } else {
             strncpy(buffer, "READ_BACK_MISMATCH", buffer_len);
+            free(recvTelegram);
             return false;
         }
     } else {
         print("not 41");
-        snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram.getCmd(), recvTelegram.getLen(), recvTelegram.getCrc());
-        recvTelegram.print();
+        snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
+        recvTelegram->print();
+        free(recvTelegram);
         return false;
     }
 }

@@ -147,11 +147,14 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
         readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config);
 
         char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
-        if (tmpBuffer == nullptr) return;
-        strncpy(tmpBuffer, "optoproxy/value/0x", 19);
-        snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
-        client.publish(tmpBuffer, receiveBuffer, false);
-        free(tmpBuffer);
+        if (tmpBuffer == nullptr) {
+            return;
+        } else {
+            strncpy(tmpBuffer, "optoproxy/value/0x", 19);
+            snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
+            client.publish(tmpBuffer, receiveBuffer, false);
+            free(tmpBuffer);
+        }
         free(config);
     }
 }
@@ -205,6 +208,9 @@ MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool 
     this->hexAddress[0] = '0';
     this->hexAddress[1] = '0';
     this->hexAddress[2] = '0';
+    this->hexAddress[3] = '\0';
+    this->hexAddress[4] = '\0';
+    this->hexAddress[5] = '\0';
     this->printHex = printHex;
 
     if (address <= 0x000F) {

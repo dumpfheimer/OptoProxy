@@ -59,12 +59,11 @@ bool getDatapointConfig(DatapointConfig *config) {
     return true;
 }
 
-char *httpBuffer = new char[HTTP_BUFFER_SIZE];
 void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
-        if (config != nullptr) free(config);
+        free(config);
         return;
     }
 
@@ -74,6 +73,7 @@ void handleRead() {
         return;
     }
 
+    char *httpBuffer = (char*) malloc(sizeof(char) * HTTP_BUFFER_SIZE);
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
@@ -83,6 +83,7 @@ void handleRead() {
             server.send(500, "text/plain", httpBuffer);
         }
     }
+    free(httpBuffer);
     free(config);
 }
 
@@ -90,7 +91,7 @@ void handleWrite() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
-        if (config != nullptr) free(config);
+        free(config);
         return;
     }
 
@@ -100,6 +101,7 @@ void handleWrite() {
         return;
     }
 
+    char *httpBuffer = (char*) malloc(sizeof(char) * HTTP_BUFFER_SIZE);
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
@@ -109,6 +111,7 @@ void handleWrite() {
             server.send(500, "text/plain", httpBuffer);
         }
     }
+    free(httpBuffer);
     free(config);
 }
 
