@@ -146,9 +146,10 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 
         char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
         if (tmpBuffer == nullptr) return;
-        strncpy(tmpBuffer, "optoproxy/value/0x", 18);
-        snprintf(&tmpBuffer[18], 4, "%04X", config.addr);
+        strncpy(tmpBuffer, "optoproxy/value/0x", 19);
+        snprintf(&tmpBuffer[18], 5, "%04X", config.addr);
         client.publish(tmpBuffer, receiveBuffer, false);
+        free(tmpBuffer);
     }
 }
 

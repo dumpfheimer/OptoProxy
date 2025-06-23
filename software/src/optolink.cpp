@@ -300,7 +300,6 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
                 snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram.getCalculatedCrc());
                 snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram.getCrc());
                 return false;
-                break;
             default:
                 snprintf(buffer, buffer_len, "UNKNOWN");
                 return false;
@@ -328,6 +327,7 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
         if (config->hex) {
             buffer[0] = '0';
             buffer[1] = 'x';
+            buffer[2] = 0;
             uint16_t offset = 2;
             for (uint8_t i = 0; i < config->len; i++) {
                 uint8_t data = recvTelegram.getData()[i + 5];
@@ -430,10 +430,10 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     sendTelegram.pushData(config->addr & 0xFF);
     sendTelegram.pushData(config->len);
 
-    double d = value.toDouble();
-    println(d);
-    if (config->factor != 0) d = d * config->factor;
-    uint32_t write = d;
+    double writeValue = value.toDouble();
+    println(writeValue);
+    if (config->factor != 0) writeValue = writeValue * config->factor;
+    uint32_t write = writeValue;
     for (uint8_t i = 0; i < config->len; i++) {
         //uint8_t push = write >> (expectBytes - 1 - i) * 8 & 0xFF;
         uint8_t push = write >> (i) * 8 & 0xFF;
@@ -457,12 +457,12 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
                 snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram.getCalculatedCrc());
                 snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram.getCrc());
                 return false;
-                break;
             default:
                 snprintf(buffer, buffer_len, "UNKNOWN");
                 return false;
         }
     }
+
     if (recvTelegram.cmd == (uint8_t) 0x41) {
         if (recvTelegram.getData()[0] != 0x01 ||
             recvTelegram.getData()[1] != 0x02) {
@@ -490,12 +490,13 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
             recvTelegram.print();
             return false;
         }
-        double writeVal = value.toDouble();
+        //double writeVal = value.toDouble();
         if (!readToBufferUnsynchronized(buffer, buffer_len, config)) {
             strncpy(buffer, "READ_BACK_FAILED", buffer_len);
             return false;
         }
-        if (config->val == writeVal) {
+        if (config->val == writeValue) {
+            //strncpy(buffer, "OK", buffer_len);
             return true;
         } else {
             strncpy(buffer, "READ_BACK_MISMATCH", buffer_len);
@@ -513,7 +514,10 @@ bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, Dat
     unsigned long start = millis();
     unsigned long timeout = 2000;
     while (link_locked && (millis() - start < timeout)) yield();
-    if (link_locked) return false;
+    if (link_locked) {
+        if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
+        return false;
+    }
 
     link_locked = true;
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);

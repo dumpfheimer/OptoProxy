@@ -64,6 +64,7 @@ void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
+        free(config);
         return;
     }
 
@@ -81,19 +82,21 @@ void handleRead() {
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
-        free(config);
     }
+    free(config);
 }
 
 void handleWrite() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
+        free(config);
         return;
     }
 
     if (!server.hasArg("val")) {
         server.send(500, "text/plain", "val not set");
+        free(config);
         return;
     }
 
@@ -105,8 +108,8 @@ void handleWrite() {
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
-        free(config);
     }
+    free(config);
 }
 
 
