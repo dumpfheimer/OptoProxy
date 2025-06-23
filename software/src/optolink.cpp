@@ -90,7 +90,7 @@ bool waitAvailable(Stream &s, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         if (s.available()) return true;
-        yield();
+        delay(0);
     }
     return s.available();
 }
@@ -110,7 +110,7 @@ bool read(Stream &s, uint8_t *c) {
 }
 
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
-    //println("readTelegram");
+    println("readTelegram");
     if (telegram == nullptr) return;
     telegram->reset();
 
@@ -386,14 +386,18 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    println("trying to lock for read");
     unsigned long start = millis();
     unsigned long timeout = 2000;
-    while (link_locked && (millis() - start < timeout)) yield();
+    while (link_locked && (millis() - start < timeout)) delay(0);
     if (link_locked) return false;
-
     link_locked = true;
+
+    println("read lock acquired");
+
     bool ret = readToBufferUnsynchronized(buffer, buffer_len, config);
     link_locked = false;
+    println("read lock released");
     return ret;
 }
 
@@ -568,19 +572,26 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
 }
 
 bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    println("trying to lock for write");
+    println(value);
     unsigned long start = millis();
     unsigned long timeout = 2000;
-    while (link_locked && (millis() - start < timeout)) yield();
+    while (link_locked && (millis() - start < timeout)) delay(0);
     if (link_locked) {
         if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
         return false;
     }
-
     link_locked = true;
+
     // when i remove println and delay writes fail?! why??? leaving it in for now..
     println("lock acquired");
+    println(value);
     delay(10);
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
+    delay(100);
+    println("lock release");
+    println(value);
+    delay(100);
     link_locked = false;
     return ret;
 }

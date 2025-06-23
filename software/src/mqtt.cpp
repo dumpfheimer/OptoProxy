@@ -233,7 +233,7 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
 volatile bool mqttLock = false;
 bool MqttDatapoint::send(char* newValue) {
     unsigned long start = millis();
-    while (mqttLock && (millis() - start < 2000)) yield();
+    while (mqttLock && (millis() - start < 2000)) delay(0);
     if (mqttLock) return false;
 
     mqttLock = true;
