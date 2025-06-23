@@ -63,10 +63,10 @@ void mqttReconnect() {
     if (!client.connected()) {
         if (!WiFi.isConnected()) return;
         if (millis() - lastConnect > 5000) {
-            Serial.print("Reconnecting...");
 #ifndef MQTT_USER
             const char* MQTT_USER = wifiMgrGetConfig("MQTT_USER");
             if (MQTT_USER == nullptr) return;
+            Serial.print("Reconnecting...");
 #endif
 #ifndef MQTT_PASS
             const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");

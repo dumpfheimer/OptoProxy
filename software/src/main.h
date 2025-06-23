@@ -39,7 +39,6 @@ extern SoftwareSerial softwareSerial;
 #define OPTOLINK_CLASS VitoWiFi::VitoWiFi<VitoWiFi::VS2>
 
 extern XWebServer server;
-Stream *getOptolinkSerial();
 
 #include "httpHandlers.h"
 

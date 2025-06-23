@@ -7,7 +7,7 @@
 
 void setupLogging() {
   #ifdef USE_LOGGING
-    LOGGING_SERIAL.begin(9600);
+    LOGGING_SERIAL.begin(74880);
     delay(10);
   #endif
 }
