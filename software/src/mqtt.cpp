@@ -19,39 +19,39 @@ unsigned long lastConnect = 0 - 5000;
     8 cop 1_10_F
     */
 MqttDatapoint mqttDatapoints[] = {
-        MqttDatapoint(0x0101, 10, 2, true),
-        MqttDatapoint(0x0106, 10, 2, false),
-        MqttDatapoint(0x0105, 10, 2, false),
-        MqttDatapoint(0x0847, 1, 1, false),
-        MqttDatapoint(0x1800, 10, 2, false),
-        MqttDatapoint(0x1803, 10, 2, false),
-        MqttDatapoint(0x010D, 10, 2, false),
-        MqttDatapoint(0x2006, 10, 2, true),
-        MqttDatapoint(0x2007, 10, 2, true),
-        MqttDatapoint(0x7110, 10, 2, true),
-        MqttDatapoint(0x7111, 10, 2, true),
-        MqttDatapoint(0x7103, 10, 2, false),
+        MqttDatapoint(0x0101, 10, 2, true, false),
+        MqttDatapoint(0x0106, 10, 2, false, false),
+        MqttDatapoint(0x0105, 10, 2, false, false),
+        MqttDatapoint(0x0847, 1, 1, false, false),
+        MqttDatapoint(0x1800, 10, 2, false, false),
+        MqttDatapoint(0x1803, 10, 2, false, false),
+        MqttDatapoint(0x010D, 10, 2, false, false),
+        MqttDatapoint(0x2006, 10, 2, true, false),
+        MqttDatapoint(0x2007, 10, 2, true, false),
+        MqttDatapoint(0x7110, 10, 2, true, false),
+        MqttDatapoint(0x7111, 10, 2, true, false),
+        MqttDatapoint(0x7103, 10, 2, false, false),
 
-        MqttDatapoint(0x2000, 10, 2, false),
-        MqttDatapoint(0x2001, 10, 2, false),
-        MqttDatapoint(0x0116, 10, 2, false),
+        MqttDatapoint(0x2000, 10, 2, false, false),
+        MqttDatapoint(0x2001, 10, 2, false, false),
+        MqttDatapoint(0x0116, 10, 2, false, false),
 
-        MqttDatapoint(0xb000, 1, 1, false),
-        MqttDatapoint(0x0494, 1, 1, false),
-        MqttDatapoint(0x048d, 1, 1, false),
-        MqttDatapoint(0x0480, 1, 1, false),
-        MqttDatapoint(0x04a6, 1, 1, false),
-        MqttDatapoint(0x2005, 1, 1, false),
+        MqttDatapoint(0xb000, 1, 1, false, false),
+        MqttDatapoint(0x0494, 1, 1, false, false),
+        MqttDatapoint(0x048d, 1, 1, false, false),
+        MqttDatapoint(0x0480, 1, 1, false, false),
+        MqttDatapoint(0x04a6, 1, 1, false, false),
+        MqttDatapoint(0x2005, 1, 1, false, false),
 
-        MqttDatapoint(0xB020, 1, 1, false),
-        MqttDatapoint(0x6000, 10, 2, false),
-        MqttDatapoint(0x600C, 10, 2, false),
+        MqttDatapoint(0xB020, 1, 1, false, false),
+        MqttDatapoint(0x6000, 10, 2, false, false),
+        MqttDatapoint(0x600C, 10, 2, false, false),
 
-        MqttDatapoint(0xB420, 1, 2, false),
-        MqttDatapoint(0xB421, 1, 2, false),
-        MqttDatapoint(0xB422, 1, 2, false),
-        MqttDatapoint(0xB423, 1, 2, false),
-        MqttDatapoint(0xB424, 1, 2, false),
+        MqttDatapoint(0xB420, 1, 2, false, false),
+        MqttDatapoint(0xB421, 1, 2, false, false),
+        MqttDatapoint(0xB422, 1, 2, false, false),
+        MqttDatapoint(0xB423, 1, 2, false, false),
+        MqttDatapoint(0xB424, 1, 2, false, false),
 };
 uint16_t mqttDatapointpointer = 0;
 
@@ -138,6 +138,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             } else if (i == 3) {
                 // len
                 if (strcmp(part, "yes") == 0 || strcmp(part, "on") == 0) config->sign = true;
+                else config->sign = false;
                 if (strcmp(part, "hex") == 0) config->hex = true;
             }
             part = strtok(nullptr, ":"); // Extract the next token
@@ -192,7 +193,7 @@ void mqttLoop() {
     }
 }
 
-MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool sign) {
+MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool sign, bool printHex) {
     this->address = address;
     this->factor = factor;
     this->length = length;
@@ -204,6 +205,7 @@ MqttDatapoint::MqttDatapoint(int address, uint16_t factor, uint8_t length, bool 
     this->hexAddress[0] = '0';
     this->hexAddress[1] = '0';
     this->hexAddress[2] = '0';
+    this->printHex = printHex;
 
     if (address <= 0x000F) {
         shift = 3;
@@ -248,6 +250,8 @@ void MqttDatapoint::loop() {
         config->len = this->length;
         config->factor = this->factor;
         config->sign = this->sign;
+        config->hex = this->printHex;
+
         if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, config)) {
             this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
         }

@@ -48,8 +48,10 @@ void setup() {
 }
 
 void loop() {
+	println("loop");
 #ifndef WIFI_SSID
     if (wifiMgrPortalLoop()) {
+	    println("running");
 #else
         loopWifi();
 #endif

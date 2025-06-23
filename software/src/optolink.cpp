@@ -143,7 +143,7 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     if (!telegram->crcIsValid()) {
         telegram->setError(CRC_ERROR);
     }
-    print("readTelegram finished");
+    println("readTelegram finished");
     //telegram->print();
 }
 void readTelegram(OptolinkTelegram* telegram) {
@@ -155,6 +155,7 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         readTelegram(telegram, timeout - (millis() - start));
+        println("cmd");
         println(telegram->getCmd());
 
         if (telegram->getCmd() == PING_REQUEST) {
@@ -436,6 +437,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     sendTelegram.pushData(config->len);
 
     double writeValue = value.toDouble();
+    println("write value");
     println(writeValue);
     if (config->factor != 0) writeValue = writeValue * config->factor;
     uint32_t write = writeValue;
