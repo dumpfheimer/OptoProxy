@@ -64,7 +64,7 @@ void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
-        free(config);
+        if (config != nullptr) free(config);
         return;
     }
 
@@ -90,7 +90,7 @@ void handleWrite() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
     if (!getDatapointConfig(config)) {
-        free(config);
+        if (config != nullptr) free(config);
         return;
     }
 

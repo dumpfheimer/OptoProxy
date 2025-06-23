@@ -94,62 +94,64 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     i = 0;
 
     if (strcmp(topic, "optoproxy/request") == 0) {
-        DatapointConfig config;
-        config.sign = false;
-        config.hex = false;
-        config.factor = 1;
-        config.addr = 0;
-        config.len = 0;
+        auto *config = (DatapointConfig *)(malloc(sizeof(DatapointConfig)));
+        if (config == nullptr) return;
+        config->sign = false;
+        config->hex = false;
+        config->factor = 1;
+        config->addr = 0;
+        config->len = 0;
 
         while (part != nullptr) {
             if (i == 0) {
                 // addr
-                config.addr = strtoul(part, nullptr, 16);
+                config->addr = strtoul(part, nullptr, 16);
             } else if (i == 1) {
                 // conv
                 if (strcmp(part, "raw") == 0) {
-                    config.len = 4;
+                    config->len = 4;
                 } else if (strcmp(part, "temp") == 0) {
-                    config.factor = 10;
-                    config.len = 2;
+                    config->factor = 10;
+                    config->len = 2;
                 } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
-                    config.len = 2;
+                    config->len = 2;
                 } else if (strcmp(part, "stat") == 0) {
-                    config.len = 1;
+                    config->len = 1;
                 } else if (strcmp(part, "count") == 0) {
-                    config.len = 4;
+                    config->len = 4;
                 } else if (strcmp(part, "counts") == 0) {
-                    config.len = 2;
+                    config->len = 2;
                 } else if (strcmp(part, "mode") == 0) {
-                    config.len = 1;
+                    config->len = 1;
                 } else if (strcmp(part, "hours") == 0) {
-                    config.factor = 3600;
-                    config.len = 4;
+                    config->factor = 3600;
+                    config->len = 4;
                 } else if (strcmp(part, "cop") == 0) {
-                    config.factor = 10;
-                    config.len = 1;
+                    config->factor = 10;
+                    config->len = 1;
                 } else {
-                    config.len = 1;
+                    config->len = 1;
                 }
             } else if (i == 2) {
                 // len
-                config.len = strtoul(part, nullptr, 10);
+                config->len = strtoul(part, nullptr, 10);
             } else if (i == 3) {
                 // len
-                if (strcmp(part, "yes") == 0 || strcmp(part, "on")) config.sign = true;
-                if (strcmp(part, "hex") == 0) config.hex = true;
+                if (strcmp(part, "yes") == 0 || strcmp(part, "on") == 0) config->sign = true;
+                if (strcmp(part, "hex") == 0) config->hex = true;
             }
             part = strtok(nullptr, ":"); // Extract the next token
             i++;
         }
-        readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, &config);
+        readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config);
 
         char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
         if (tmpBuffer == nullptr) return;
         strncpy(tmpBuffer, "optoproxy/value/0x", 19);
-        snprintf(&tmpBuffer[18], 5, "%04X", config.addr);
+        snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
         client.publish(tmpBuffer, receiveBuffer, false);
         free(tmpBuffer);
+        free(config);
     }
 }
 
@@ -240,13 +242,16 @@ bool MqttDatapoint::send(char* newValue) {
 }
 
 void MqttDatapoint::loop() {
-    DatapointConfig config;
-    config.addr = this->address;
-    config.len = this->length;
-    config.factor = this->factor;
-    config.sign = this->sign;
-    if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, &config)) {
-        this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
+    auto *config = (DatapointConfig *)(malloc(sizeof(DatapointConfig)));
+    if (config != nullptr) {
+        config->addr = this->address;
+        config->len = this->length;
+        config->factor = this->factor;
+        config->sign = this->sign;
+        if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, config)) {
+            this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
+        }
+        free(config);
     }
 }
 
