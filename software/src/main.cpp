@@ -25,7 +25,6 @@ void setup() {
 #endif
 
     setupHttp();
-    ElegantOTA.begin(&server);
 
 #ifdef WIFI_SSID
     while (WiFi.status() != WL_CONNECTED) {

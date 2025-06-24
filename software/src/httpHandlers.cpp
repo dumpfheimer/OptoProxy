@@ -2,7 +2,7 @@
 
 void handleRoot() {
     server.send(200, "text/plain",
-                "usage: /read?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop");
+                "usage: /read?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop)");
 }
 bool getDatapointConfig(DatapointConfig *config) {
     if (config == nullptr) return false;
@@ -110,7 +110,7 @@ void handleWrite() {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
         strncpy(httpBuffer, "NORES\0", HTTP_BUFFER_SIZE);
-        if (writeFromString(server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
+        if (writeFromString(&server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);

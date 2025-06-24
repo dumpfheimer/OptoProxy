@@ -10,8 +10,6 @@
 
 // We are using a WEMOS D1
 
-#include <ElegantOTA.h>
-
 #include "configuration.h"
 #include "wifi_mgr.h"
 

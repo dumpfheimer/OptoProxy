@@ -7,12 +7,14 @@ unsigned long link_lock_timeout = 200;
 volatile bool link_locked = false;
 
 OptolinkTelegram::OptolinkTelegram() {
+    this->dataPtr = 0;
     this->reset();
 }
 void OptolinkTelegram::reset() {
     this->error = NONE;
     this->cmd = 0;
     this->len = 0;
+    this->dataPtr = OPTOLINK_DATA_SIZE - 1;
     while (this->dataPtr > 0) this->data[this->dataPtr--] = 0;
     this->data[0] = 0;
     this->crc = 0;
@@ -36,7 +38,7 @@ uint8_t OptolinkTelegram::getLen() const {
     return this->len;
 }
 void OptolinkTelegram::pushData(uint8_t d) {
-    this->data[this->dataPtr++] = d;
+    if (dataPtr < OPTOLINK_DATA_SIZE) this->data[this->dataPtr++] = d;
 }
 uint8_t OptolinkTelegram::getDataLength() const {
     return this->dataPtr;
@@ -103,7 +105,7 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     if (telegram == nullptr) return;
     telegram->reset();
 
-    uint8_t charBuffer;
+    uint8_t charBuffer = 0;
     if (!read(OPTOLINK_SERIAL, &charBuffer, timeout)) {
         telegram->setError(TIMEOUT);
         return;
@@ -212,6 +214,7 @@ bool loopOptolink() {
 }
 
 bool convertData(DatapointConfig *config, const uint8_t dataBuffer[]) {
+    if (config == nullptr) return false;
     config->val = 0;
     if (config->len == 1) {
         if (config->sign) {
@@ -271,8 +274,8 @@ bool convertData(DatapointConfig *config, const uint8_t dataBuffer[]) {
     return true;
 }
 
-bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, bool retryOnMismatch) {
-    //loopOptolink();
+bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, uint8_t retryOnMismatch) {
+    if (buffer == nullptr || config == nullptr) return false;
 
     OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (sendTelegram == nullptr) {
@@ -322,26 +325,26 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
             recvTelegram->getData()[1] != READ) {
             snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram->getData()[0], recvTelegram->getData()[1]);
             free(recvTelegram);
-            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
             else return false;
         }
         if (recvTelegram->getLen() != (5 + config->len)) {
             snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram->getLen(), config->len + 5);
             free(recvTelegram);
-            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
             return false;
         }
         if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
             recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
             snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
             free(recvTelegram);
-            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
             return false;
         }
         if (recvTelegram->getData()[4] != config->len) {
             snprintf(buffer, buffer_len, "RESPONSE_BYTES_MISMATCH");
             free(recvTelegram);
-            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
             return false;
         }
         if (config->hex) {
@@ -376,10 +379,12 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    return readToBufferUnsynchronized(buffer, buffer_len, config, true);
+    return readToBufferUnsynchronized(buffer, buffer_len, config, 2);
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    if (buffer == nullptr || config == nullptr) return false;
+
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
@@ -394,8 +399,8 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     return ret;
 }
 
-bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    if (buffer == nullptr || config == nullptr) {
+bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    if (buffer == nullptr || config == nullptr || value == nullptr) {
         return false;
     }
 
@@ -468,7 +473,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     sendTelegram->pushData(config->addr & 0xFF);
     sendTelegram->pushData(config->len);
 
-    double writeValue = value.toDouble();
+    double writeValue = value->toDouble();
     if (config->factor != 0) writeValue = writeValue * config->factor;
     uint32_t write = writeValue;
     for (uint8_t i = 0; i < config->len; i++) {
@@ -557,11 +562,13 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     }
 }
 
-bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    if (buffer == nullptr || config == nullptr || value == nullptr) return false;
+
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
-        if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
+        strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
         return false;
     }
     link_locked = true;

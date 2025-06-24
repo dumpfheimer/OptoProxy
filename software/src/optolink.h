@@ -8,6 +8,8 @@
 #include <Arduino.h>
 #include "main.h"
 
+#define OPTOLINK_DATA_SIZE 30
+
 enum OptolinkTelegramError {
     NONE,
     TIMEOUT,
@@ -60,7 +62,7 @@ public:
 private:
     OptolinkTelegramError error;
     uint8_t len;
-    uint8_t data[30];
+    uint8_t data[OPTOLINK_DATA_SIZE]{0};
     uint8_t dataPtr;
     uint8_t crc;
 };
@@ -77,6 +79,6 @@ struct DatapointConfig {
 bool loopOptolink();
 bool optolinkIsLocked();
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config);
-bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
+bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
 
 #endif //SOFTWARE_OPTOLINK_H
