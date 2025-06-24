@@ -74,16 +74,6 @@ void OptolinkTelegram::writeTo(Stream& s) {
     this->calculateCrc();
     s.write(this->crc);
 }
-String OptolinkTelegram::toString() {
-    String ret = String(this->cmd, HEX) + " " + String(this->getDataLength(), HEX);
-    for (uint8_t i = 0; i < this->getDataLength() && i < 10; i++) ret += ":" + String(this->data[i], HEX);
-    if (this->getDataLength() > 10) ret += "...";
-    ret += "=" + String(this->crc, HEX);
-    return ret;
-}
-void OptolinkTelegram::print() {
-    println(toString());
-}
 
 bool waitAvailable(Stream &s, unsigned long timeout) {
     if (s.available()) return true;
@@ -521,14 +511,14 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
             recvTelegram->getData()[1] != WRITE) {
             snprintf(buffer, buffer_len, "INV_CMD %02X %02X ", recvTelegram->getData()[0], recvTelegram->getData()[1]);
             printf("INV_CMD");
-            recvTelegram->print();
+            //recvTelegram->print();
             free(recvTelegram);
             return false;
         }
         if (recvTelegram->getLen() != 5) {
             snprintf(buffer, buffer_len, "INV_LEN %d != %d", recvTelegram->getLen(), 5);
             printf("INV_LEN");
-            recvTelegram->print();
+            //recvTelegram->print();
             free(recvTelegram);
             return false;
         }
@@ -536,14 +526,14 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
             recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
             snprintf(buffer, buffer_len, "INV_ADDR %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
             printf("INV_ADDR");
-            recvTelegram->print();
+            //recvTelegram->print();
             free(recvTelegram);
             return false;
         }
         if (recvTelegram->getData()[4] != config->len) {
             snprintf(buffer, buffer_len, "INV_LEN2");
             printf("INV_LEN2");
-            recvTelegram->print();
+            //recvTelegram->print();
             free(recvTelegram);
             return false;
         }
@@ -565,7 +555,7 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     } else {
         print("not 41");
         snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
-        recvTelegram->print();
+        //recvTelegram->print();
         free(recvTelegram);
         return false;
     }

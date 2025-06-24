@@ -56,8 +56,6 @@ public:
     bool crcIsValid();
     bool crcEquals(uint8_t crc);
     void writeTo(Stream& s);
-    String toString();
-    void print();
     uint8_t cmd;
 private:
     OptolinkTelegramError error;
