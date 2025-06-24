@@ -43,18 +43,18 @@ public:
     void setError(OptolinkTelegramError error);
     OptolinkTelegramError getError();
     void setCmd(uint8_t cmd);
-    uint8_t getCmd();
+    uint8_t getCmd() const;
     void setLen(uint8_t len);
-    uint8_t getLen();
+    uint8_t getLen() const;
     void pushData(uint8_t d);
-    uint8_t getDataLength();
+    uint8_t getDataLength() const;
     uint8_t* getData();
     void setCrc(uint8_t crc);
-    uint8_t getCrc();
+    uint8_t getCrc() const;
     void calculateCrc();
     uint8_t getCalculatedCrc();
     bool crcIsValid();
-    bool crcEquals(uint8_t crc);
+    bool crcEquals(uint8_t crc) const;
     void writeTo(Stream& s);
     uint8_t cmd;
 private:
@@ -75,6 +75,7 @@ struct DatapointConfig {
 };
 
 bool loopOptolink();
+bool optolinkIsLocked();
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config);
 bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
 

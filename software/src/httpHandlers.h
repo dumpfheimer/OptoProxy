@@ -10,7 +10,7 @@
 #include "main.h"
 #include "optolink.h"
 
-#define HTTP_BUFFER_SIZE 64
+#define HTTP_BUFFER_SIZE 32
 
 void setupHttp();
 void loopHttp();

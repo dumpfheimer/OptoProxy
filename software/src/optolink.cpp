@@ -3,6 +3,7 @@
 //
 #include "optolink.h"
 
+unsigned long link_lock_timeout = 200;
 volatile bool link_locked = false;
 
 OptolinkTelegram::OptolinkTelegram() {
@@ -16,55 +17,55 @@ void OptolinkTelegram::reset() {
     this->data[0] = 0;
     this->crc = 0;
 }
-void OptolinkTelegram::setError(OptolinkTelegramError error) {
-    this->error = error;
+void OptolinkTelegram::setError(OptolinkTelegramError error_) {
+    this->error = error_;
 }
 OptolinkTelegramError OptolinkTelegram::getError() {
     return this->error;
 }
-void OptolinkTelegram::setCmd(uint8_t cmd) {
-    this->cmd = cmd;
+void OptolinkTelegram::setCmd(uint8_t cmd_) {
+    this->cmd = cmd_;
 }
-uint8_t OptolinkTelegram::getCmd() {
+uint8_t OptolinkTelegram::getCmd() const {
     return this->cmd;
 }
-void OptolinkTelegram::setLen(uint8_t len) {
-    this->len = len;
+void OptolinkTelegram::setLen(uint8_t len_) {
+    this->len = len_;
 }
-uint8_t OptolinkTelegram::getLen() {
+uint8_t OptolinkTelegram::getLen() const {
     return this->len;
 }
 void OptolinkTelegram::pushData(uint8_t d) {
     this->data[this->dataPtr++] = d;
 }
-uint8_t OptolinkTelegram::getDataLength() {
+uint8_t OptolinkTelegram::getDataLength() const {
     return this->dataPtr;
 }
 uint8_t* OptolinkTelegram::getData() {
     return this->data;
 }
-void OptolinkTelegram::setCrc(uint8_t crc) {
-    this->crc = crc;
+void OptolinkTelegram::setCrc(uint8_t crc_) {
+    this->crc = crc_;
 }
-uint8_t OptolinkTelegram::getCrc() {
+uint8_t OptolinkTelegram::getCrc() const {
     return this->crc;
 }
 void OptolinkTelegram::calculateCrc() {
     this->crc = getCalculatedCrc();
 }
 uint8_t OptolinkTelegram::getCalculatedCrc() {
-    uint8_t crc = 0;
-    crc += this->getDataLength();
+    uint8_t crc_ = 0;
+    crc_ += this->getDataLength();
     for (uint8_t i = 0; i < this->getDataLength(); i++) {
-        crc += this->data[i];
+        crc_ += this->data[i];
     }
-    return crc;
+    return crc_;
 }
 bool OptolinkTelegram::crcIsValid() {
     return this->getCalculatedCrc() == this->crc;
 }
-bool OptolinkTelegram::crcEquals(uint8_t crc) {
-    return this->crc == crc;
+bool OptolinkTelegram::crcEquals(uint8_t crc_) const {
+    return this->crc == crc_;
 }
 void OptolinkTelegram::writeTo(Stream& s) {
     this->calculateCrc();
@@ -76,11 +77,10 @@ void OptolinkTelegram::writeTo(Stream& s) {
 }
 
 bool waitAvailable(Stream &s, unsigned long timeout) {
-    if (s.available()) return true;
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
+        //delay(1);
         if (s.available()) return true;
-        delay(0);
     }
     return s.available();
 }
@@ -137,11 +137,13 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     println("readTelegram finished");
     //telegram->print();
 }
+
 void readTelegram(OptolinkTelegram* telegram) {
     readTelegram(telegram, 500);
 }
 
 void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
+    if (telegram == nullptr) return;
     telegram->reset();
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
@@ -155,7 +157,7 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
             OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
             // this seems bad
             // it only works after the ESP dies and restarts. then the heater will communicate again
-            readTelegram(telegram, 2500);
+            readTelegram(telegram, 500);
             if (telegram->getCmd() == PING_REQUEST) {
                 println("got second ping");
                 telegram->reset();
@@ -177,7 +179,19 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
 }
 
 bool loopOptolink() {
-    if (!OPTOLINK_SERIAL.available()) return false;
+    println("trying to lock for loop");
+    unsigned long start = millis();
+    while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
+    if (link_locked) return false;
+    link_locked = true;
+
+    println("loop lock acquired");
+
+    if (!OPTOLINK_SERIAL.available()) {
+        link_locked = false;
+        println("loop lock released");
+        return false;
+    }
 
     OptolinkTelegram *loopTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (loopTelegram != nullptr) {
@@ -202,15 +216,22 @@ bool loopOptolink() {
                 if (loopTelegram->getCmd() == ACK) {
                     println("was 06, handshake completed");
                     while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+                    free(loopTelegram);
+                    link_locked = false;
+                    println("loop lock released");
                     return true;
                 }
             }
         }
+        free(loopTelegram);
     }
+
+    link_locked = false;
+    println("loop lock released");
     return false;
 }
 
-bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
+bool convertData(DatapointConfig *config, const uint8_t dataBuffer[]) {
     config->val = 0;
     if (config->len == 1) {
         if (config->sign) {
@@ -238,7 +259,7 @@ bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
         }
     } else {
         uint32_t data = 0;
-        for (int16_t i = config->len - 1; i >= 0; i--) {
+        for (uint16_t i = config->len - 1; i >= 0; i--) {
             data <<= 8;
             data |= dataBuffer[i];
         }
@@ -270,8 +291,8 @@ bool convertData(DatapointConfig *config, uint8_t dataBuffer[]) {
     return true;
 }
 
-bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, bool retryOnAddrMismatch) {
-    loopOptolink();
+bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, bool retryOnMismatch) {
+    //loopOptolink();
 
     OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (sendTelegram == nullptr) {
@@ -321,23 +342,26 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
             recvTelegram->getData()[1] != READ) {
             snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram->getData()[0], recvTelegram->getData()[1]);
             free(recvTelegram);
-            if (retryOnAddrMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
+            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
             else return false;
         }
         if (recvTelegram->getLen() != (5 + config->len)) {
             snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram->getLen(), config->len + 5);
             free(recvTelegram);
+            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
             return false;
         }
         if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
             recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
             snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
             free(recvTelegram);
+            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
             return false;
         }
         if (recvTelegram->getData()[4] != config->len) {
             snprintf(buffer, buffer_len, "RESPONSE_BYTES_MISMATCH");
             free(recvTelegram);
+            if (retryOnMismatch) return readToBufferUnsynchronized(buffer, buffer_len, config, false);
             return false;
         }
         if (config->hex) {
@@ -378,9 +402,11 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     println("trying to lock for read");
     unsigned long start = millis();
-    unsigned long timeout = 2000;
-    while (link_locked && (millis() - start < timeout)) delay(0);
-    if (link_locked) return false;
+    while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
+    if (link_locked) {
+        if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
+        return false;
+    }
     link_locked = true;
 
     println("read lock acquired");
@@ -392,6 +418,10 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
 }
 
 bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    if (buffer == nullptr || config == nullptr) {
+        return false;
+    }
+
     bool canWrite = false;
     if (config->addr == 0x7100) canWrite = true; // kühlart
     if (config->addr == 0x7101) canWrite = true; // heizkreis
@@ -441,12 +471,12 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     // heizen langzeitermittlung: 180min
 
     if (!canWrite) {
-        if (buffer != nullptr) strncpy(buffer, "INVALID_ADDRESS", buffer_len);
+        strncpy(buffer, "INVALID_ADDRESS", buffer_len);
         return false;
     }
     println("can write");
 
-    loopOptolink();
+    //loopOptolink();
 
     OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (sendTelegram == nullptr) {
@@ -468,19 +498,11 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     if (config->factor != 0) writeValue = writeValue * config->factor;
     uint32_t write = writeValue;
     for (uint8_t i = 0; i < config->len; i++) {
-        //uint8_t push = write >> (expectBytes - 1 - i) * 8 & 0xFF;
         uint8_t push = write >> (i) * 8 & 0xFF;
         sendTelegram->pushData(push);
     }
 
     sendTelegram->writeTo(OPTOLINK_SERIAL);
-    /*free(sendTelegram);
-
-    OptolinkTelegram *recvTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
-    if (recvTelegram == nullptr) {
-        snprintf(buffer, buffer_len, "OOM2");
-        return false;
-    }*/
     OptolinkTelegram *recvTelegram = sendTelegram;
     print("send done");
 
@@ -565,8 +587,7 @@ bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, Dat
     println("trying to lock for write");
     println(value);
     unsigned long start = millis();
-    unsigned long timeout = 2000;
-    while (link_locked && (millis() - start < timeout)) delay(0);
+    while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
         if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
         return false;
@@ -576,12 +597,13 @@ bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, Dat
     // when i remove println and delay writes fail?! why??? leaving it in for now..
     println("lock acquired");
     println(value);
-    delay(10);
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
-    delay(100);
     println("lock release");
     println(value);
-    delay(100);
     link_locked = false;
     return ret;
+}
+
+bool optolinkIsLocked() {
+    return link_locked;
 }

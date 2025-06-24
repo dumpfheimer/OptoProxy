@@ -55,10 +55,6 @@ MqttDatapoint mqttDatapoints[] = {
 };
 uint16_t mqttDatapointpointer = 0;
 
-char *topicBuffer = new char[MQTT_TOPIC_BUFFER_SIZE];
-char *valueBuffer = new char[MQTT_VALUE_BUFFER_SIZE];
-char *receiveBuffer = new char[MQTT_VALUE_BUFFER_SIZE];
-
 void mqttReconnect() {
     if (!client.connected()) {
         if (!WiFi.isConnected()) return;
@@ -66,18 +62,18 @@ void mqttReconnect() {
 #ifndef MQTT_USER
             const char* MQTT_USER = wifiMgrGetConfig("MQTT_USER");
             if (MQTT_USER == nullptr) return;
-            Serial.print("Reconnecting...");
+            print("Reconnecting...");
 #endif
 #ifndef MQTT_PASS
             const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");
             if (MQTT_PASS == nullptr) return;
 #endif
             if (!client.connect(WiFi.getHostname(), MQTT_USER, MQTT_PASS)) {
-                Serial.print("failed, rc=");
-                Serial.print(client.state());
-                Serial.println(" retrying in 5 seconds");
+                print("failed, rc=");
+                print(client.state());
+                println(" retrying in 5 seconds");
             } else {
-                Serial.print("success");
+                println("success");
                 client.subscribe("optoproxy/request");
             }
             lastConnect = millis();
@@ -88,12 +84,16 @@ void mqttReconnect() {
 void onMqttMessage(char *topic, byte *payload, unsigned int length) {
     if (length > MQTT_VALUE_BUFFER_SIZE - 2) return;
     unsigned int i;
-    for (i = 0; i < length && i < MQTT_VALUE_BUFFER_SIZE - 1; i++) receiveBuffer[i] = (char) payload[i];
-    receiveBuffer[i] = '\0';
-    char *part = strtok(receiveBuffer, ":");
-    i = 0;
 
     if (strcmp(topic, "optoproxy/request") == 0) {
+        char *receiveBuffer = (char*) malloc(sizeof(char) * MQTT_VALUE_BUFFER_SIZE);
+        if (receiveBuffer == nullptr) return;
+
+        for (i = 0; i < length && i < MQTT_VALUE_BUFFER_SIZE - 1; i++) receiveBuffer[i] = (char) payload[i];
+        receiveBuffer[i] = '\0';
+        char *part = strtok(receiveBuffer, ":");
+        i = 0;
+
         auto *config = (DatapointConfig *)(malloc(sizeof(DatapointConfig)));
         if (config == nullptr) return;
         config->sign = false;
@@ -108,27 +108,21 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
                 config->addr = strtoul(part, nullptr, 16);
             } else if (i == 1) {
                 // conv
-                if (strcmp(part, "raw") == 0) {
+                if (strcmp(part, "raw") == 0 || strcmp(part, "count") == 0) {
                     config->len = 4;
                 } else if (strcmp(part, "temp") == 0) {
                     config->factor = 10;
                     config->len = 2;
-                } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0) {
+                } else if (strcmp(part, "temps") == 0 || strcmp(part, "percent") == 0 || strcmp(part, "counts") == 0) {
                     config->len = 2;
-                } else if (strcmp(part, "stat") == 0) {
-                    config->len = 1;
-                } else if (strcmp(part, "count") == 0) {
-                    config->len = 4;
-                } else if (strcmp(part, "counts") == 0) {
-                    config->len = 2;
-                } else if (strcmp(part, "mode") == 0) {
-                    config->len = 1;
                 } else if (strcmp(part, "hours") == 0) {
                     config->factor = 3600;
                     config->len = 4;
                 } else if (strcmp(part, "cop") == 0) {
                     config->factor = 10;
                     config->len = 1;
+                //} else if (strcmp(part, "stat") == 0 || strcmp(part, "mode") == 0) {
+                //    config->len = 1;
                 } else {
                     config->len = 1;
                 }
@@ -144,18 +138,22 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             part = strtok(nullptr, ":"); // Extract the next token
             i++;
         }
-        readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config);
 
-        char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
-        if (tmpBuffer == nullptr) {
-            return;
-        } else {
-            strncpy(tmpBuffer, "optoproxy/value/0x", 19);
-            snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
-            client.publish(tmpBuffer, receiveBuffer, false);
-            free(tmpBuffer);
+        if (config->len > 0) { // Only proceed if we have a valid length
+            readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config);
+
+            char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
+            if (tmpBuffer != nullptr) {
+                strncpy(tmpBuffer, "optoproxy/value/0x", 19);
+                snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
+                client.publish(tmpBuffer, receiveBuffer, false);
+                client.loop();
+                wifiClient.flush();
+                free(tmpBuffer);
+            }
         }
         free(config);
+        free(receiveBuffer);
     }
 }
 
@@ -171,7 +169,6 @@ void mqttSetup() {
     if (MQTT_HOST == nullptr) return;
     client.setServer(MQTT_HOST, 1883);
 #endif
-    client.setBufferSize(350);
     client.setCallback(onMqttMessage);
 }
 
@@ -191,8 +188,10 @@ void mqttLoop() {
     if (client.connected()) {
         client.loop();
 
-        MqttDatapoint *nextDatapoint = getNextDataPoint();
-        nextDatapoint->loop();
+        if (!optolinkIsLocked()) {
+            MqttDatapoint *nextDatapoint = getNextDataPoint();
+            nextDatapoint->loop();
+        }
     }
 }
 
@@ -230,22 +229,23 @@ bool MqttDatapoint::compareAndSend(char* newValue) {
     }
     return false;
 }
-volatile bool mqttLock = false;
-bool MqttDatapoint::send(char* newValue) {
-    unsigned long start = millis();
-    while (mqttLock && (millis() - start < 2000)) delay(0);
-    if (mqttLock) return false;
 
-    mqttLock = true;
+bool MqttDatapoint::send(char* newValue) {
+    if (newValue == nullptr) return false;
+
+    char *topicBuffer = (char*) malloc(sizeof(char) * MQTT_TOPIC_BUFFER_SIZE);
+    if (topicBuffer == nullptr) return false;
+
     strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
     strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
     bool ret = client.publish(topicBuffer, newValue, true);
     client.loop();
+    wifiClient.flush();
     if (ret) {
         this->lastSend = millis();
         strncpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
     }
-    mqttLock = false;
+    free(topicBuffer);
     return ret;
 }
 
@@ -258,9 +258,16 @@ void MqttDatapoint::loop() {
         config->sign = this->sign;
         config->hex = this->printHex;
 
+        char *valueBuffer = (char*) malloc(sizeof(char) * MQTT_VALUE_BUFFER_SIZE);
+
+        if (valueBuffer == nullptr) {
+            free(config);
+            return;
+        }
         if (readToBuffer(valueBuffer, MQTT_VALUE_BUFFER_SIZE, config)) {
             this->compareAndSend(valueBuffer) || (wantsToSend() && send(valueBuffer));
         }
+        free(valueBuffer);
         free(config);
     }
 }

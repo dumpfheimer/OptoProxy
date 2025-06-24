@@ -48,15 +48,17 @@ void setup() {
 }
 
 void loop() {
-	println("loop");
 #ifndef WIFI_SSID
     if (wifiMgrPortalLoop()) {
-	    println("running");
+        yield();
 #else
         loopWifi();
+        server.handleClient();
 #endif
-        loopOptolink();
-        if (WiFi.isConnected()) server.handleClient();
+        if (!optolinkIsLocked()) {
+            loopOptolink();
+            yield();
+        }
         mqttLoop();
         loopHttp();
 #ifndef WIFI_SSID

@@ -10,7 +10,7 @@ bool getDatapointConfig(DatapointConfig *config) {
         server.send(400, "text/plain", "addr missing");
         return false;
     }
-    config->addr = strtoul(server.arg("addr").c_str(), NULL, 16);
+    config->addr = strtoul(server.arg("addr").c_str(), nullptr, 16);
     config->len = 0;
     config->factor = 1;
     config->sign = false;
@@ -62,6 +62,7 @@ bool getDatapointConfig(DatapointConfig *config) {
 void handleRead() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    // config is null checked in getDatapointConfig
     if (!getDatapointConfig(config)) {
         free(config);
         return;
@@ -77,12 +78,14 @@ void handleRead() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
+        strncpy(httpBuffer, "NORES\0", HTTP_BUFFER_SIZE);
         if (readToBuffer(httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
     }
+
     free(httpBuffer);
     free(config);
 }
@@ -90,6 +93,7 @@ void handleRead() {
 void handleWrite() {
     DatapointConfig *config;
     config = (DatapointConfig*) malloc(sizeof(DatapointConfig));
+    // config is null checked in getDatapointConfig
     if (!getDatapointConfig(config)) {
         free(config);
         return;
@@ -105,12 +109,14 @@ void handleWrite() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
+        strncpy(httpBuffer, "NORES\0", HTTP_BUFFER_SIZE);
         if (writeFromString(server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
         }
     }
+
     free(httpBuffer);
     free(config);
 }
@@ -184,8 +190,8 @@ void handleGpioWrite() {
         server.send(400, "text/plain", "pin missing");
         return;
     }
-    int pin = server.arg("pin").toInt();
-    int val = server.arg("val").toInt();
+    long pin = server.arg("pin").toInt();
+    long val = server.arg("val").toInt();
 
     if (server.hasArg("timer")) {
         if (pin < MAX_TIMER_GPIO) {
