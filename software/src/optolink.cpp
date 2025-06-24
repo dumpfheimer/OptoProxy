@@ -100,7 +100,6 @@ bool read(Stream &s, uint8_t *c) {
 }
 
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
-    println("readTelegram");
     if (telegram == nullptr) return;
     telegram->reset();
 
@@ -134,7 +133,6 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     if (!telegram->crcIsValid()) {
         telegram->setError(CRC_ERROR);
     }
-    println("readTelegram finished");
     //telegram->print();
 }
 
@@ -148,18 +146,14 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
         readTelegram(telegram, timeout - (millis() - start));
-        println("cmd");
-        println(telegram->getCmd());
 
         if (telegram->getCmd() == PING_REQUEST) {
-            println("got ping msg");
             // ping
             OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
             // this seems bad
             // it only works after the ESP dies and restarts. then the heater will communicate again
             readTelegram(telegram, 500);
             if (telegram->getCmd() == PING_REQUEST) {
-                println("got second ping");
                 telegram->reset();
                 telegram->setCmd(BEGIN_COMMUNICATION);
                 telegram->writeTo(OPTOLINK_SERIAL);
@@ -168,7 +162,6 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
                 println("did not get second ping message");
             }
         } else if (telegram->getCmd() == ACK) {
-            println("got ack msg");
             // ack
             //return readUsefulTelegram(telegram, timeout - (millis() - start));
         } else {
@@ -179,46 +172,34 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
 }
 
 bool loopOptolink() {
-    println("trying to lock for loop");
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) return false;
     link_locked = true;
 
-    println("loop lock acquired");
-
     if (!OPTOLINK_SERIAL.available()) {
         link_locked = false;
-        println("loop lock released");
         return false;
     }
 
     OptolinkTelegram *loopTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (loopTelegram != nullptr) {
         readTelegram(loopTelegram);
-        println("read a telegram in loop");
-        print(loopTelegram->getCmd());
         if (loopTelegram->getCmd() == PING_REQUEST) {
             while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
             OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
-            println("waiting for second telegram");
             waitAvailable(OPTOLINK_SERIAL, 2500);
             readTelegram(loopTelegram);
-            println("read second telegram");
             if (loopTelegram->getCmd() == PING_REQUEST) {
-                println("was 05 too");
                 while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
                 loopTelegram->reset();
                 loopTelegram->setCmd(BEGIN_COMMUNICATION);
                 loopTelegram->writeTo(OPTOLINK_SERIAL);
                 readTelegram(loopTelegram);
-                println("read third telegram");
                 if (loopTelegram->getCmd() == ACK) {
-                    println("was 06, handshake completed");
                     while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
                     free(loopTelegram);
                     link_locked = false;
-                    println("loop lock released");
                     return true;
                 }
             }
@@ -227,7 +208,6 @@ bool loopOptolink() {
     }
 
     link_locked = false;
-    println("loop lock released");
     return false;
 }
 
@@ -400,7 +380,6 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    println("trying to lock for read");
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
@@ -409,11 +388,9 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     }
     link_locked = true;
 
-    println("read lock acquired");
 
     bool ret = readToBufferUnsynchronized(buffer, buffer_len, config);
     link_locked = false;
-    println("read lock released");
     return ret;
 }
 
@@ -474,7 +451,6 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
         strncpy(buffer, "INVALID_ADDRESS", buffer_len);
         return false;
     }
-    println("can write");
 
     //loopOptolink();
 
@@ -493,8 +469,6 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
     sendTelegram->pushData(config->len);
 
     double writeValue = value.toDouble();
-    println("write value");
-    println(writeValue);
     if (config->factor != 0) writeValue = writeValue * config->factor;
     uint32_t write = writeValue;
     for (uint8_t i = 0; i < config->len; i++) {
@@ -584,8 +558,6 @@ bool writeFromStringUnsynchronized(const String& value, char* buffer, uint16_t b
 }
 
 bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    println("trying to lock for write");
-    println(value);
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
@@ -595,11 +567,7 @@ bool writeFromString(const String& value, char* buffer, uint16_t buffer_len, Dat
     link_locked = true;
 
     // when i remove println and delay writes fail?! why??? leaving it in for now..
-    println("lock acquired");
-    println(value);
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
-    println("lock release");
-    println(value);
     link_locked = false;
     return ret;
 }

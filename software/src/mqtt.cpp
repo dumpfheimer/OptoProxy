@@ -62,18 +62,13 @@ void mqttReconnect() {
 #ifndef MQTT_USER
             const char* MQTT_USER = wifiMgrGetConfig("MQTT_USER");
             if (MQTT_USER == nullptr) return;
-            print("Reconnecting...");
 #endif
 #ifndef MQTT_PASS
             const char* MQTT_PASS = wifiMgrGetConfig("MQTT_PASS");
             if (MQTT_PASS == nullptr) return;
 #endif
             if (!client.connect(WiFi.getHostname(), MQTT_USER, MQTT_PASS)) {
-                print("failed, rc=");
-                print(client.state());
-                println(" retrying in 5 seconds");
             } else {
-                println("success");
                 client.subscribe("optoproxy/request");
             }
             lastConnect = millis();
@@ -146,9 +141,10 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             if (tmpBuffer != nullptr) {
                 strncpy(tmpBuffer, "optoproxy/value/0x", 19);
                 snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
-                client.publish(tmpBuffer, receiveBuffer, false);
-                client.loop();
-                wifiClient.flush();
+                if (client.publish(tmpBuffer, receiveBuffer, false)) {
+                    client.loop();
+                    wifiClient.flush();
+                }
                 free(tmpBuffer);
             }
         }
@@ -239,9 +235,9 @@ bool MqttDatapoint::send(char* newValue) {
     strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
     strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
     bool ret = client.publish(topicBuffer, newValue, true);
-    client.loop();
-    wifiClient.flush();
     if (ret) {
+        client.loop();
+        wifiClient.flush();
         this->lastSend = millis();
         strncpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
     }
