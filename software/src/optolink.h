@@ -45,18 +45,18 @@ public:
     void setError(OptolinkTelegramError error);
     OptolinkTelegramError getError();
     void setCmd(uint8_t cmd);
-    uint8_t getCmd() const;
+    [[nodiscard]] uint8_t getCmd() const;
     void setLen(uint8_t len);
-    uint8_t getLen() const;
+    [[nodiscard]] uint8_t getLen() const;
     void pushData(uint8_t d);
-    uint8_t getDataLength() const;
+    [[nodiscard]] uint8_t getDataLength() const;
     uint8_t* getData();
     void setCrc(uint8_t crc);
-    uint8_t getCrc() const;
+    [[nodiscard]] uint8_t getCrc() const;
     void calculateCrc();
     uint8_t getCalculatedCrc();
     bool crcIsValid();
-    bool crcEquals(uint8_t crc) const;
+    [[nodiscard]] bool crcEquals(uint8_t crc) const;
     void writeTo(Stream& s);
     uint8_t cmd;
 private:

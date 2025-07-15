@@ -81,13 +81,13 @@ void OptolinkTelegram::writeTo(Stream& s) {
 bool waitAvailable(Stream &s, unsigned long timeout) {
     unsigned long start = millis();
     while ((millis() - start) < timeout) {
-        //delay(1);
+        yield();
         if (s.available()) return true;
     }
     return s.available();
 }
 
-bool read(Stream &s, uint8_t *c, long timeout) {
+bool read(Stream &s, uint8_t *c, unsigned long timeout) {
     waitAvailable(s, timeout);
     if (s.available()) {
         OPTOLINK_SERIAL.read(c, 1);
@@ -242,7 +242,7 @@ bool convertData(DatapointConfig *config, const uint8_t dataBuffer[]) {
         }
     } else {
         uint32_t data = 0;
-        for (uint16_t i = config->len - 1; i >= 0; i--) {
+        for (int i = config->len - 1; i >= 0; i--) {
             data <<= 8;
             data |= dataBuffer[i];
         }
@@ -274,7 +274,7 @@ bool convertData(DatapointConfig *config, const uint8_t dataBuffer[]) {
     return true;
 }
 
-bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, uint8_t retryOnMismatch) {
+bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config, uint8_t readRetries) {
     if (buffer == nullptr || config == nullptr) return false;
 
     OptolinkTelegram *sendTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
@@ -292,90 +292,95 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
     sendTelegram->pushData(config->len);
     sendTelegram->writeTo(OPTOLINK_SERIAL);
     //sendTelegram->print();
-    /*free(sendTelegram);
+    free(sendTelegram);
 
     OptolinkTelegram *recvTelegram = (OptolinkTelegram*) malloc(sizeof(OptolinkTelegram));
     if (recvTelegram == nullptr) {
         snprintf(buffer, buffer_len, "OOM1");
         return false;
-    }*/
-    OptolinkTelegram *recvTelegram = sendTelegram;
-    readUsefulTelegram(recvTelegram, 500);
+    }
+    //OptolinkTelegram *recvTelegram = sendTelegram;
+    do {
+        readUsefulTelegram(recvTelegram, 500);
 
-    if (recvTelegram->getError() != NONE) {
-        switch (recvTelegram->getError()) {
-            case TIMEOUT:
-                snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
-                free(recvTelegram);
-                return false;
-            case CRC_ERROR:
-                strncpy(buffer, "CRC ", buffer_len);
-                snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram->getCalculatedCrc());
-                snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram->getCrc());
-                free(recvTelegram);
-                return false;
-            default:
-                snprintf(buffer, buffer_len, "UNKNOWN");
-                free(recvTelegram);
-                return false;
-        }
-    }
-    if (recvTelegram->cmd == (uint8_t) DATA_REQUEST) {
-        if (recvTelegram->getData()[0] != RESPONSE ||
-            recvTelegram->getData()[1] != READ) {
-            snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram->getData()[0], recvTelegram->getData()[1]);
-            free(recvTelegram);
-            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
-            else return false;
-        }
-        if (recvTelegram->getLen() != (5 + config->len)) {
-            snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram->getLen(), config->len + 5);
-            free(recvTelegram);
-            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
-            return false;
-        }
-        if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
-            recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
-            snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
-            free(recvTelegram);
-            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
-            return false;
-        }
-        if (recvTelegram->getData()[4] != config->len) {
-            snprintf(buffer, buffer_len, "RESPONSE_BYTES_MISMATCH");
-            free(recvTelegram);
-            if (retryOnMismatch > 0) return readToBufferUnsynchronized(buffer, buffer_len, config, retryOnMismatch - 1);
-            return false;
-        }
-        if (config->hex) {
-            buffer[0] = '0';
-            buffer[1] = 'x';
-            buffer[2] = 0;
-            uint16_t offset = 2;
-            for (uint8_t i = 0; i < config->len; i++) {
-                uint8_t data = recvTelegram->getData()[i + 5];
-                offset += snprintf(buffer + offset, buffer_len - offset, "%02X", data);
+        if (recvTelegram->getError() != NONE) {
+            switch (recvTelegram->getError()) {
+                case TIMEOUT:
+                    snprintf(buffer, buffer_len, "TIMEOUT %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
+                    free(recvTelegram);
+                    return false;
+                case CRC_ERROR:
+                    strlcpy(buffer, "CRC ", buffer_len);
+                    snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram->getCalculatedCrc());
+                    snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram->getCrc());
+                    free(recvTelegram);
+                    return false;
+                default:
+                    snprintf(buffer, buffer_len, "UNKNOWN");
+                    free(recvTelegram);
+                    return false;
             }
-            free(recvTelegram);
-            return true;
+        }
+        if (recvTelegram->cmd == (uint8_t) DATA_REQUEST) {
+            if (recvTelegram->getData()[0] != RESPONSE ||
+                recvTelegram->getData()[1] != READ) {
+                snprintf(buffer, buffer_len, "RESPONSE_MISMATCH %02X %02X", recvTelegram->getData()[0], recvTelegram->getData()[1]);
+
+                if (readRetries > 0) continue;
+                free(recvTelegram);
+                return false;
+            }
+            if (recvTelegram->getLen() != (5 + config->len)) {
+                snprintf(buffer, buffer_len, "ANSWER_LENGTH_MISMATCH %d != %d", recvTelegram->getLen(), config->len + 5);
+                if (readRetries > 0) continue;
+                free(recvTelegram);
+                return false;
+            }
+            if (recvTelegram->getData()[2] != (uint8_t) (config->addr >> 8) ||
+                recvTelegram->getData()[3] != (uint8_t) (config->addr & 0xFF)) {
+                snprintf(buffer, buffer_len, "RESPONSE_ADDRESS_MISMATCH %02X %02X != %02X %02X", recvTelegram->getData()[2], recvTelegram->getData()[3], config->addr >> 8, config->addr & 0xFF);
+                if (readRetries > 0) continue;
+                free(recvTelegram);
+                return false;
+                }
+            if (recvTelegram->getData()[4] != config->len) {
+                snprintf(buffer, buffer_len, "RESPONSE_BYTES_MISMATCH");
+                if (readRetries > 0) continue;
+                free(recvTelegram);
+                return false;
+            }
+            if (config->hex) {
+                buffer[0] = '0';
+                buffer[1] = 'x';
+                buffer[2] = 0;
+                uint16_t offset = 2;
+                for (uint8_t i = 0; i < config->len; i++) {
+                    uint8_t data = recvTelegram->getData()[i + 5];
+                    offset += snprintf(buffer + offset, buffer_len - offset, "%02X", data);
+                }
+                free(recvTelegram);
+                return true;
+            } else {
+                //factorTest(recvTelegram->getData() + 5, expectBytes, factor, sign, val);
+                if (!convertData(config, recvTelegram->getData() + 5)) {
+                    snprintf(buffer, buffer_len, "DATA_CONVERSION_FAILED");
+                    return false;
+                }
+                print("val is (end) ");
+                print(config->val);
+                snprintf(buffer, buffer_len, "%.2f", config->val);
+                free(recvTelegram);
+                return true;
+            }
         } else {
-            //factorTest(recvTelegram->getData() + 5, expectBytes, factor, sign, val);
-            if (!convertData(config, recvTelegram->getData() + 5)) {
-                snprintf(buffer, buffer_len, "DATA_CONVERSION_FAILED");
-                return false;
-            }
-            print("val is (end) ");
-            print(config->val);
-            snprintf(buffer, buffer_len, "%.2f", config->val);
+            print("not 41");
+            snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
             free(recvTelegram);
-            return true;
+            return false;
         }
-    } else {
-        print("not 41");
-        snprintf(buffer, buffer_len, "NOT_41 %02X %02X %02X", recvTelegram->getCmd(), recvTelegram->getLen(), recvTelegram->getCrc());
-        free(recvTelegram);
-        return false;
-    }
+    } while (readRetries-- != 0);
+    strlcpy(buffer, "LOOP_QUIT", buffer_len);
+    return false;
 }
 
 bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
@@ -383,12 +388,13 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
-    if (buffer == nullptr || config == nullptr) return false;
+    if (buffer == nullptr || config == nullptr || buffer_len < 1) return false;
+    buffer[0] = 0;
 
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
-        if (buffer != nullptr) strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
+        strlcpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
         return false;
     }
     link_locked = true;
@@ -453,7 +459,7 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     // heizen langzeitermittlung: 180min
 
     if (!canWrite) {
-        strncpy(buffer, "INVALID_ADDRESS", buffer_len);
+        strlcpy(buffer, "INVALID_ADDRESS", buffer_len);
         return false;
     }
 
@@ -496,7 +502,7 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
                 free(recvTelegram);
                 return false;
             case CRC_ERROR:
-                strncpy(buffer, "CRC ", buffer_len);
+                strlcpy(buffer, "CRC ", buffer_len);
                 snprintf(buffer + 4, buffer_len - 4, "%02X ", recvTelegram->getCalculatedCrc());
                 snprintf(buffer + 7, buffer_len - 7, "%02X ", recvTelegram->getCrc());
                 free(recvTelegram);
@@ -540,16 +546,16 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
         }
         //double writeVal = value.toDouble();
         if (!readToBufferUnsynchronized(buffer, buffer_len, config)) {
-            strncpy(buffer, "READ_BACK_FAILED", buffer_len);
+            strlcpy(buffer, "READ_BACK_FAILED", buffer_len);
             free(recvTelegram);
             return false;
         }
         if (config->val == writeValue) {
-            //strncpy(buffer, "OK", buffer_len);
+            //strlcpy(buffer, "OK", buffer_len);
             free(recvTelegram);
             return true;
         } else {
-            strncpy(buffer, "READ_BACK_MISMATCH", buffer_len);
+            strlcpy(buffer, "READ_BACK_MISMATCH", buffer_len);
             free(recvTelegram);
             return false;
         }
@@ -568,7 +574,7 @@ bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, Dat
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
-        strncpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
+        strlcpy(buffer, "LINK_LOCK_TIMEOUT", buffer_len);
         return false;
     }
     link_locked = true;

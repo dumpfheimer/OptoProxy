@@ -78,7 +78,7 @@ void handleRead() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        strncpy(httpBuffer, "NORES\0", HTTP_BUFFER_SIZE);
+        snprintf(httpBuffer, HTTP_BUFFER_SIZE, "NORES");
         if (readToBuffer(httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
@@ -109,7 +109,7 @@ void handleWrite() {
     if (httpBuffer == nullptr) {
         server.send(500, "text/plain" "OUT_OF_MEMORY");
     } else {
-        strncpy(httpBuffer, "NORES\0", HTTP_BUFFER_SIZE);
+        strlcpy(httpBuffer, "NORES", HTTP_BUFFER_SIZE);
         if (writeFromString(&server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
@@ -120,61 +120,6 @@ void handleWrite() {
     free(httpBuffer);
     free(config);
 }
-
-
-/*
-  server.on("/", handleRoot);
-  server.on("/read", handleRead);
-  server.on("/aussenT", handleAussenT);
-  server.on("/brauchwasserT", handleBrauchwasserT);
-  server.on("/ruecklaufT", handleRuecklaufT);
-  server.on("/vorlaufT", handleVorlaufT);
-  server.on("/vorlaufTsoll", handleVorlaufTsoll);
-  server.on("/ventilHeizenWW", handleVentilHeizenWW);
-DPTemp aussenT("aussenT", "boiler", 0x0101); // Aussentemperatur (Sensor 1)
-DPTemp brauchwasserT("brauchwasserT", "boiler", 0x010D); // Brauchwassertemperatur
-DPTemp ruecklaufT("ruecklaufT", "boiler", 0x0106); // Rücklauftemperatur (17A)
-DPTemp vorlaufT("vorlaufT", "boiler", 0x0105); // Vorlauftemperatur (17B)
-DPTemp vorlaufTsoll("vorlaufTsoll", "boiler", 0x1800); // Vorlaufsolltemperatur Anlage
-DPStat ventilHeizenWW("ventilHeizenWW", "boiler", 0x494); // Status Umschaltventil Heizen/Warmwasser Ein/Aus
-
-#define DATAPOINTS*/
-/*
-void handleAussenT() {
-    float f = 0;
-    String ret = readToString(&f, 0x0101, 4, &VitoWiFi::div10);
-    server.send(200, "text/plain", ret);
-}
-
-void handleBrauchwasserT() {
-    float f = 0;
-    String ret = readToString(&f, 0x010D, 4, &VitoWiFi::div10);
-    server.send(200, "text/plain", ret);
-}
-
-void handleRuecklaufT() {
-    float f = 0;
-    String ret = readToString(&f, 0x0106, 4, &VitoWiFi::div10);
-    server.send(200, "text/plain", ret);
-}
-
-void handleVorlaufT() {
-    float f = 0;
-    String ret = readToString(&f, 0x0105, 4, &VitoWiFi::div10);
-    server.send(200, "text/plain", ret);
-}
-
-void handleVorlaufTsoll() {
-    float f = 0;
-    String ret = readToString(&f, 0x1800, 4, &VitoWiFi::div10);
-    server.send(200, "text/plain", ret);
-}
-
-void handleVentilHeizenWW() {
-    float f = 0;
-    String ret = readToString(&f, 0x494, 1, &VitoWiFi::noconv);
-    server.send(200, "text/plain", ret);
-}*/
 
 #define MAX_TIMER_GPIO 20
 unsigned long timer_start[MAX_TIMER_GPIO] = {0};
@@ -226,12 +171,5 @@ void setupHttp() {
     server.on("/", handleRoot);
     server.on("/read", handleRead);
     server.on("/write", handleWrite);
-    /*
-    server.on("/aussenT", handleAussenT);
-    server.on("/brauchwasserT", handleBrauchwasserT);
-    server.on("/ruecklaufT", handleRuecklaufT);
-    server.on("/vorlaufT", handleVorlaufT);
-    server.on("/vorlaufTsoll", handleVorlaufTsoll);
-    server.on("/ventilHeizenWW", handleVentilHeizenWW);*/
     server.on("/gpio/write", handleGpioWrite);
 }

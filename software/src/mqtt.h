@@ -23,12 +23,12 @@ public:
     bool compareAndSend(char* newValue);
     bool send(char* newValue);
     void loop();
-    bool wantsToSend() const;
+    [[nodiscard]] bool wantsToSend() const;
     int address;
     uint16_t factor;
     uint8_t length;
-    char lastValue[MQTT_VALUE_BUFFER_SIZE]{};
-    char hexAddress[6]{};
+    char lastValue[MQTT_VALUE_BUFFER_SIZE]{0};
+    char hexAddress[6]{0};
     unsigned long sendInterval;
     unsigned long lastSend;
     bool sign;

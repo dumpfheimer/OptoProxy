@@ -90,7 +90,10 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
         i = 0;
 
         auto *config = (DatapointConfig *)(malloc(sizeof(DatapointConfig)));
-        if (config == nullptr) return;
+        if (config == nullptr) {
+            free(receiveBuffer);
+            return;
+        }
         config->sign = false;
         config->hex = false;
         config->factor = 1;
@@ -135,17 +138,17 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
         }
 
         if (config->len > 0) { // Only proceed if we have a valid length
-            readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config);
-
-            char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
-            if (tmpBuffer != nullptr) {
-                strncpy(tmpBuffer, "optoproxy/value/0x", 19);
-                snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
-                if (client.publish(tmpBuffer, receiveBuffer, false)) {
-                    client.loop();
-                    wifiClient.flush();
+            if (readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config)) {
+                char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
+                if (tmpBuffer != nullptr) {
+                    strlcpy(tmpBuffer, "optoproxy/value/0x", 19);
+                    snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
+                    if (client.publish(tmpBuffer, receiveBuffer, false)) {
+                        client.loop();
+                        wifiClient.flush();
+                    }
+                    free(tmpBuffer);
                 }
-                free(tmpBuffer);
             }
         }
         free(config);
@@ -232,14 +235,14 @@ bool MqttDatapoint::send(char* newValue) {
     char *topicBuffer = (char*) malloc(sizeof(char) * MQTT_TOPIC_BUFFER_SIZE);
     if (topicBuffer == nullptr) return false;
 
-    strncpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
-    strncpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
+    strlcpy(topicBuffer, "optoproxy/value/0x", MQTT_TOPIC_BUFFER_SIZE);
+    strlcpy(&topicBuffer[18], this->hexAddress, MQTT_TOPIC_BUFFER_SIZE - 18);
     bool ret = client.publish(topicBuffer, newValue, true);
     if (ret) {
         client.loop();
         wifiClient.flush();
         this->lastSend = millis();
-        strncpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
+        strlcpy(this->lastValue, newValue, MQTT_VALUE_BUFFER_SIZE);
     }
     free(topicBuffer);
     return ret;
