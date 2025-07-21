@@ -5,6 +5,8 @@
 
 unsigned long link_lock_timeout = 200;
 volatile bool link_locked = false;
+bool link_working = false;
+uint16_t link_handhskes = 0;
 
 OptolinkTelegram::OptolinkTelegram() {
     this->dataPtr = 0;
@@ -104,6 +106,7 @@ bool read(Stream &s, uint8_t *c) {
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     if (telegram == nullptr) return;
     telegram->reset();
+    link_working = false;
 
     uint8_t charBuffer = 0;
     if (!read(OPTOLINK_SERIAL, &charBuffer, timeout)) {
@@ -134,12 +137,14 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     telegram->setCrc(charBuffer);
     if (!telegram->crcIsValid()) {
         telegram->setError(CRC_ERROR);
+    } else {
+        link_working = true;
     }
     //telegram->print();
 }
 
 void readTelegram(OptolinkTelegram* telegram) {
-    readTelegram(telegram, 500);
+    readTelegram(telegram, 200);
 }
 
 void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
@@ -150,18 +155,13 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
         readTelegram(telegram, timeout - (millis() - start));
 
         if (telegram->getCmd() == PING_REQUEST) {
-            // ping
-            OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
-            // this seems bad
-            // it only works after the ESP dies and restarts. then the heater will communicate again
-            readTelegram(telegram, 500);
-            if (telegram->getCmd() == PING_REQUEST) {
-                telegram->reset();
-                telegram->setCmd(BEGIN_COMMUNICATION);
-                telegram->writeTo(OPTOLINK_SERIAL);
-                readTelegram(telegram);
-            } else {
-                println("did not get second ping message");
+            while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+            telegram->reset();
+            telegram->setCmd(BEGIN_COMMUNICATION);
+            telegram->writeTo(OPTOLINK_SERIAL);
+            readTelegram(telegram);
+            if (telegram->getCmd() == ACK) {
+                while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
             }
         } else if (telegram->getCmd() == ACK) {
             // ack
@@ -188,22 +188,31 @@ bool loopOptolink() {
     if (loopTelegram != nullptr) {
         readTelegram(loopTelegram);
         if (loopTelegram->getCmd() == PING_REQUEST) {
-            while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-            OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
-            waitAvailable(OPTOLINK_SERIAL, 2500);
-            readTelegram(loopTelegram);
-            if (loopTelegram->getCmd() == PING_REQUEST) {
-                while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+            if (!link_working) {
+                while (waitAvailable(OPTOLINK_SERIAL, 5)) OPTOLINK_SERIAL.read();
+                OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
+                link_handhskes++;
+                readTelegram(loopTelegram, 2500);
+                if (loopTelegram->getCmd() == PING_REQUEST) {
+                    while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+                    loopTelegram->reset();
+                    loopTelegram->setCmd(BEGIN_COMMUNICATION);
+                    loopTelegram->writeTo(OPTOLINK_SERIAL);
+                    readTelegram(loopTelegram);
+                    if (loopTelegram->getCmd() == ACK) {
+                        while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
+                        free(loopTelegram);
+                        link_locked = false;
+                        return true;
+                    }
+                }
+            } else {
+                // link should be fine, do not reset communication
                 loopTelegram->reset();
                 loopTelegram->setCmd(BEGIN_COMMUNICATION);
                 loopTelegram->writeTo(OPTOLINK_SERIAL);
                 readTelegram(loopTelegram);
-                if (loopTelegram->getCmd() == ACK) {
-                    while (waitAvailable(OPTOLINK_SERIAL, 20)) OPTOLINK_SERIAL.read();
-                    free(loopTelegram);
-                    link_locked = false;
-                    return true;
-                }
+                return true;
             }
         }
         free(loopTelegram);
@@ -301,7 +310,7 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
     }
     //OptolinkTelegram *recvTelegram = sendTelegram;
     do {
-        readUsefulTelegram(recvTelegram, 500);
+        readUsefulTelegram(recvTelegram, 200);
 
         if (recvTelegram->getError() != NONE) {
             switch (recvTelegram->getError()) {
@@ -428,12 +437,14 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     if (config->addr == 0x2006) canWrite = true; // heizkennlinie niveau
     if (config->addr == 0x2007) canWrite = true; // heizkennlinie steigung
     if (config->addr == 0x200A) canWrite = true; // Einfluss Raumtemperaturaufschaltung
+    if (config->addr == 0x200B) canWrite = true; // Raumtemperaturaufschaltung
     if (config->addr == 0x2034) canWrite = true; // Einfluss Raumtemperaturaufschaltung kühlen
     if (config->addr == 0xb000) canWrite = true; // betriebsmodus
     if (config->addr == 0x7002) canWrite = true; // temerpatur mittel langzeitermittlung min (counts)
     if (config->addr == 0x7003) canWrite = true; // Temperaturdifferenz heizen an = Langzeitmittel - 7003 - 2
     // Temperaturdifferenz heizen aus = Langzeitmittel - 7003 + 2
     if (config->addr == 0x7004) canWrite = true; // Temperaturdifferenz kühlgrenze Kühlgrenze = RaumSollTemp + 7004
+    if (config->addr == 0x7105) canWrite = true; // Raumtemperaturregelung Kühlkreis
     if (config->addr == 0x71FE) canWrite = true; // Active Cooling Freigabe
     if (config->addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
     if (config->addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
@@ -447,6 +458,8 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     if (config->addr == 0xB020) canWrite = true; // 1x WW bereiten
     if (config->addr == 0x6000) canWrite = true; // 1x WW Soll
     if (config->addr == 0x600C) canWrite = true; // 1x WW2 Soll
+    if (config->addr == 0x6007) canWrite = true; // Hysterese WW-Temperatur Wärmepumpe
+    if (config->addr == 0x6008) canWrite = true; // Hysterese WW-Temperatur Zusatzheizung
 
     // http://192.168.11.30/read?addr=0x1A52&conv=cop Ventilator PROZENT
     // http://192.168.11.30/read?addr=0x1A53&conv=cop Lüfter Prozent
@@ -492,7 +505,7 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     print("send done");
 
     print("waiting for telegram");
-    readUsefulTelegram(recvTelegram, 500);
+    readUsefulTelegram(recvTelegram, 200);
     print("got telegram");
 
     if (recvTelegram->getError() != NONE) {
@@ -579,7 +592,6 @@ bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, Dat
     }
     link_locked = true;
 
-    // when i remove println and delay writes fail?! why??? leaving it in for now..
     bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
     link_locked = false;
     return ret;
@@ -587,4 +599,8 @@ bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, Dat
 
 bool optolinkIsLocked() {
     return link_locked;
+}
+
+uint16_t getLinkHandshakes() {
+    return link_handhskes;
 }

@@ -4,6 +4,11 @@ void handleRoot() {
     server.send(200, "text/plain",
                 "usage: /read?addr=0F43&len=2&conv=temp (len 0-4, conv: 0: raw, 1:temp, 2:temps, 3:stat, 4:count, 5:counts, 6:mode, 7:hours, 8:cop)");
 }
+
+void handleHandshakes() {
+    server.send(200, "text/plain", String(getLinkHandshakes()));
+}
+
 bool getDatapointConfig(DatapointConfig *config) {
     if (config == nullptr) return false;
     if (!server.hasArg("addr")) {
@@ -169,6 +174,7 @@ void loopHttp() {
 
 void setupHttp() {
     server.on("/", handleRoot);
+    server.on("/handshakes", handleHandshakes);
     server.on("/read", handleRead);
     server.on("/write", handleWrite);
     server.on("/gpio/write", handleGpioWrite);
