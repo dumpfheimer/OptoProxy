@@ -8,6 +8,19 @@ volatile bool link_locked = false;
 bool link_working = false;
 uint16_t link_handhskes = 0;
 
+#ifdef STARTUP_QUIET_TIME
+boolean startupQuietTime = true;
+
+bool startupQuietTimeEnabled() {
+    if (startupQuietTime) {
+        if (millis() < STARTUP_QUIET_TIME) return true;
+        startupQuietTime = false;
+    }
+    return false;
+}
+#endif
+
+
 OptolinkTelegram::OptolinkTelegram() {
     this->dataPtr = 0;
     this->reset();
@@ -174,6 +187,9 @@ void readUsefulTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
 }
 
 bool loopOptolink() {
+#ifdef STARTUP_QUIET_TIME
+    if (startupQuietTimeEnabled()) return false;
+#endif
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) return false;
@@ -373,6 +389,7 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
                 //factorTest(recvTelegram->getData() + 5, expectBytes, factor, sign, val);
                 if (!convertData(config, recvTelegram->getData() + 5)) {
                     snprintf(buffer, buffer_len, "DATA_CONVERSION_FAILED");
+                    free(recvTelegram);
                     return false;
                 }
                 print("val is (end) ");
@@ -397,6 +414,9 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
 }
 
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+#ifdef STARTUP_QUIET_TIME
+    if (startupQuietTimeEnabled()) return false;
+#endif
     if (buffer == nullptr || config == nullptr || buffer_len < 1) return false;
     buffer[0] = 0;
 
@@ -583,6 +603,9 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
 
 bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     if (buffer == nullptr || config == nullptr || value == nullptr) return false;
+#ifdef STARTUP_QUIET_TIME
+    if (startupQuietTimeEnabled()) return false;
+#endif
 
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);

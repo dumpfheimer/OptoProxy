@@ -81,7 +81,7 @@ void handleRead() {
 
     char *httpBuffer = (char*) malloc(sizeof(char) * HTTP_BUFFER_SIZE);
     if (httpBuffer == nullptr) {
-        server.send(500, "text/plain" "OUT_OF_MEMORY");
+        server.send(500, "text/plain", "OUT_OF_MEMORY");
     } else {
         snprintf(httpBuffer, HTTP_BUFFER_SIZE, "NORES");
         if (readToBuffer(httpBuffer, HTTP_BUFFER_SIZE, config)) {
@@ -112,7 +112,7 @@ void handleWrite() {
 
     char *httpBuffer = (char*) malloc(sizeof(char) * HTTP_BUFFER_SIZE);
     if (httpBuffer == nullptr) {
-        server.send(500, "text/plain" "OUT_OF_MEMORY");
+        server.send(500, "text/plain", "OUT_OF_MEMORY");
     } else {
         strlcpy(httpBuffer, "NORES", HTTP_BUFFER_SIZE);
         if (writeFromString(&server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
@@ -137,7 +137,7 @@ void handleGpioWrite() {
         return;
     }
     if (!server.hasArg("val")) {
-        server.send(400, "text/plain", "pin missing");
+        server.send(400, "text/plain", "val missing");
         return;
     }
     long pin = server.arg("pin").toInt();
@@ -157,7 +157,7 @@ void handleGpioWrite() {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, val);
 
-    server.send(200, "ok");
+    server.send(200, "text/plain", "ok");
 }
 
 void loopHttp() {
