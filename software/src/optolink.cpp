@@ -434,12 +434,12 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     return ret;
 }
 
-bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config, bool forceWrite) {
     if (buffer == nullptr || config == nullptr || value == nullptr) {
         return false;
     }
 
-    bool canWrite = false;
+    bool canWrite = forceWrite;
     if (config->addr == 0x7100) canWrite = true; // kühlart
     if (config->addr == 0x7101) canWrite = true; // heizkreis
     if (config->addr == 0x7102) canWrite = true; // raumtemp soll kuehlen
@@ -601,7 +601,11 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     }
 }
 
-bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    return writeFromStringUnsynchronized(value, buffer, buffer_len, config, false);
+}
+
+bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config, bool forceWrite) {
     if (buffer == nullptr || config == nullptr || value == nullptr) return false;
 #ifdef STARTUP_QUIET_TIME
     if (startupQuietTimeEnabled()) return false;
@@ -615,9 +619,13 @@ bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, Dat
     }
     link_locked = true;
 
-    bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config);
+    bool ret = writeFromStringUnsynchronized(value, buffer, buffer_len, config, forceWrite);
     link_locked = false;
     return ret;
+}
+
+bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config) {
+    return writeFromString(value, buffer, buffer_len, config, false);
 }
 
 bool optolinkIsLocked() {

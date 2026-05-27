@@ -80,6 +80,7 @@ bool loopOptolink();
 bool optolinkIsLocked();
 bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config);
 bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
+bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config, bool forceWrite);
 uint16_t getLinkHandshakes();
 
 #endif //SOFTWARE_OPTOLINK_H

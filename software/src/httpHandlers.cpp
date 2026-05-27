@@ -115,7 +115,15 @@ void handleWrite() {
         server.send(500, "text/plain", "OUT_OF_MEMORY");
     } else {
         strlcpy(httpBuffer, "NORES", HTTP_BUFFER_SIZE);
-        if (writeFromString(&server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config)) {
+        bool forceWrite = false;
+#ifdef FORCE_WRITE_PASSWORD
+        if (server.hasArg("pw")) {
+            if (server.arg("pw") == FORCE_WRITE_PASSWORD) {
+                forceWrite = true;
+            }
+        }
+#endif
+        if (writeFromString(&server.arg("val"), httpBuffer, HTTP_BUFFER_SIZE, config, forceWrite)) {
             server.send(200, "text/plain", httpBuffer);
         } else {
             server.send(500, "text/plain", httpBuffer);
