@@ -137,12 +137,12 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
             i++;
         }
 
-        if (config->len > 0) { // Only proceed if we have a valid length
+        if (config->len > 0 && config->len <= OPTOLINK_DATA_SIZE - 5) { // Only proceed if we have a valid length
             if (readToBuffer(receiveBuffer, MQTT_VALUE_BUFFER_SIZE, config)) {
                 char* tmpBuffer = (char*) malloc(sizeof(char) * (18 + 4 + 1));
                 if (tmpBuffer != nullptr) {
                     strlcpy(tmpBuffer, "optoproxy/value/0x", 19);
-                    snprintf(&tmpBuffer[18], 5, "%04X", config->addr);
+                    snprintf(&tmpBuffer[18], 5, "%04x", config->addr);
                     if (client.publish(tmpBuffer, receiveBuffer, false)) {
                         client.loop();
                         wifiClient.flush();

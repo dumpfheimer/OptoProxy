@@ -89,7 +89,6 @@ void OptolinkTelegram::writeTo(Stream& s) {
     s.write(this->cmd);
     s.write(this->getDataLength());
     for (int i = 0; i < this->getDataLength(); i++) s.write(this->data[i]);
-    this->calculateCrc();
     s.write(this->crc);
 }
 
@@ -105,7 +104,7 @@ bool waitAvailable(Stream &s, unsigned long timeout) {
 bool read(Stream &s, uint8_t *c, unsigned long timeout) {
     waitAvailable(s, timeout);
     if (s.available()) {
-        OPTOLINK_SERIAL.read(c, 1);
+        *c = (uint8_t) s.read();
         return true;
     } else {
         return false;
@@ -228,6 +227,8 @@ bool loopOptolink() {
                 loopTelegram->setCmd(BEGIN_COMMUNICATION);
                 loopTelegram->writeTo(OPTOLINK_SERIAL);
                 readTelegram(loopTelegram);
+                free(loopTelegram);
+                link_locked = false;
                 return true;
             }
         }
@@ -379,7 +380,7 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
                 buffer[1] = 'x';
                 buffer[2] = 0;
                 uint16_t offset = 2;
-                for (uint8_t i = 0; i < config->len; i++) {
+                for (uint8_t i = 0; i < config->len && offset + 2 < buffer_len; i++) {
                     uint8_t data = recvTelegram->getData()[i + 5];
                     offset += snprintf(buffer + offset, buffer_len - offset, "%02X", data);
                 }

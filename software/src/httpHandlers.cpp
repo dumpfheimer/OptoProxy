@@ -57,7 +57,7 @@ bool getDatapointConfig(DatapointConfig *config) {
     if (server.hasArg("len")) config->len = server.arg("len").toInt();
     if (server.hasArg("length")) config->len = server.arg("length").toInt();
     if (server.hasArg("sign") && server.arg("sign") == "true") config->sign = true;
-    if (config->len == 0) {
+    if (config->len == 0 || config->len > OPTOLINK_DATA_SIZE - 5) {
         server.send(500, "text/plain", "INVALID_LENGTH");
         return false;
     }
@@ -159,6 +159,7 @@ void handleGpioWrite() {
             timer_value[pin] = val == 0 ? 1 : 0;
         } else {
             server.send(400, "text/plain", "gpio out of reach for timer");
+            return;
         }
     }
 
