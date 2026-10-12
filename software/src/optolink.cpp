@@ -7,6 +7,10 @@ unsigned long link_lock_timeout = 200;
 volatile bool link_locked = false;
 bool link_working = false;
 uint16_t link_handhskes = 0;
+uint16_t link_resyncs = 0;
+uint8_t link_consecutive_failures = 0;
+bool link_resync_quiet = false;
+unsigned long link_resync_start = 0;
 
 #ifdef STARTUP_QUIET_TIME
 boolean startupQuietTime = true;
@@ -115,6 +119,42 @@ bool read(Stream &s, uint8_t *c) {
     return read(s, c, 20);
 }
 
+void flushRx() {
+    if (!OPTOLINK_SERIAL.available()) return;
+    // drain until the line has been silent for 5ms (one byte at 4800 8E2 takes ~2.3ms)
+    while (waitAvailable(OPTOLINK_SERIAL, 5)) OPTOLINK_SERIAL.read();
+}
+
+void startLinkResync() {
+    // the link is desynced. reset the heater's protocol state (0x04 -> back to KW mode)
+    // and stay silent afterwards: like on startup, the heater needs silence to recover.
+    // the next 0x05 ping after the quiet time triggers a fresh handshake in loopOptolink().
+    flushRx();
+    OPTOLINK_SERIAL.write(RESET_COMMUNICATION);
+    link_resync_quiet = true;
+    link_resync_start = millis();
+    link_resyncs++;
+    link_consecutive_failures = 0;
+    link_working = false;
+}
+
+bool linkResyncQuietTime() {
+    if (link_resync_quiet) {
+        if (millis() - link_resync_start < LINK_RESYNC_QUIET_TIME) return true;
+        link_resync_quiet = false;
+    }
+    return false;
+}
+
+void registerLinkResult(bool success) {
+    if (success) {
+        link_consecutive_failures = 0;
+    } else if (!link_resync_quiet) {
+        link_consecutive_failures++;
+        if (link_consecutive_failures >= LINK_RESYNC_FAILURE_THRESHOLD) startLinkResync();
+    }
+}
+
 void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     if (telegram == nullptr) return;
     telegram->reset();
@@ -149,8 +189,12 @@ void readTelegram(OptolinkTelegram* telegram, unsigned long timeout) {
     telegram->setCrc(charBuffer);
     if (!telegram->crcIsValid()) {
         telegram->setError(CRC_ERROR);
+        // P300: a corrupt telegram must be NACKed so the heater does not wait for an ACK forever
+        OPTOLINK_SERIAL.write(NACK);
     } else {
         link_working = true;
+        // P300: every valid telegram must be ACKed by the receiver
+        OPTOLINK_SERIAL.write(ACK);
     }
     //telegram->print();
 }
@@ -189,6 +233,12 @@ bool loopOptolink() {
 #ifdef STARTUP_QUIET_TIME
     if (startupQuietTimeEnabled()) return false;
 #endif
+    if (linkResyncQuietTime()) {
+        // stay silent so the heater can reset. drain incoming bytes (e.g. 0x05 pings)
+        // without answering; the first ping after the quiet time restarts the handshake.
+        while (OPTOLINK_SERIAL.available()) OPTOLINK_SERIAL.read();
+        return false;
+    }
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) return false;
@@ -316,6 +366,7 @@ bool readToBufferUnsynchronized(char* buffer, uint16_t buffer_len, DatapointConf
     sendTelegram->pushData(config->addr >> 8);
     sendTelegram->pushData(config->addr & 0xFF);
     sendTelegram->pushData(config->len);
+    flushRx(); // discard stale bytes (e.g. a late response to an earlier request) so we don't parse them as our answer
     sendTelegram->writeTo(OPTOLINK_SERIAL);
     //sendTelegram->print();
     free(sendTelegram);
@@ -421,6 +472,11 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
     if (buffer == nullptr || config == nullptr || buffer_len < 1) return false;
     buffer[0] = 0;
 
+    if (linkResyncQuietTime()) {
+        strlcpy(buffer, "LINK_RESYNC", buffer_len);
+        return false;
+    }
+
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
@@ -431,6 +487,7 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config) {
 
 
     bool ret = readToBufferUnsynchronized(buffer, buffer_len, config);
+    registerLinkResult(ret);
     link_locked = false;
     return ret;
 }
@@ -469,9 +526,11 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     if (config->addr == 0x71FE) canWrite = true; // Active Cooling Freigabe
     if (config->addr == 0x730F) canWrite = true; // Optimale Leistung bei min. Aussentemperatur
     if (config->addr == 0x7310) canWrite = true; // Optimale Leistung bei max. Aussentemperatur
+    if (config->addr == 0x7313) canWrite = true; // Hysterese vorlauf
     if (config->addr == 0x7414) canWrite = true; // Startleistung
     if (config->addr == 0x5006) canWrite = true; // Min. Pausenzeit Verdichter
     if (config->addr == 0x77FC) canWrite = true; // Aussentemp Quelle
+    if (config->addr == 0x7907) canWrite = true; // Max Leistung elektr. Zusatzheizung 1=3kW 2=6kW 3=9kW
     // 6000 WW Soll
     // B020 1x WW bereiten
     // 600C WW2 Soll
@@ -481,6 +540,8 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
     if (config->addr == 0x600C) canWrite = true; // 1x WW2 Soll
     if (config->addr == 0x6007) canWrite = true; // Hysterese WW-Temperatur Wärmepumpe
     if (config->addr == 0x6008) canWrite = true; // Hysterese WW-Temperatur Zusatzheizung
+    if (config->addr == 0x6015) canWrite = true; // Freigabe Elektro WW Bereitung
+    if (config->addr == 0x6040) canWrite = true; // WW: zusatzheizung nur für nachbereitung
 
     // http://192.168.11.30/read?addr=0x1A52&conv=cop Ventilator PROZENT
     // http://192.168.11.30/read?addr=0x1A53&conv=cop Lüfter Prozent
@@ -521,6 +582,7 @@ bool writeFromStringUnsynchronized(const String *value, char* buffer, uint16_t b
         sendTelegram->pushData(push);
     }
 
+    flushRx(); // discard stale bytes so we don't parse them as our answer
     sendTelegram->writeTo(OPTOLINK_SERIAL);
     OptolinkTelegram *recvTelegram = sendTelegram;
     print("send done");
@@ -612,6 +674,11 @@ bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, Dat
     if (startupQuietTimeEnabled()) return false;
 #endif
 
+    if (linkResyncQuietTime()) {
+        strlcpy(buffer, "LINK_RESYNC", buffer_len);
+        return false;
+    }
+
     unsigned long start = millis();
     while (link_locked && (millis() - start < link_lock_timeout)) delay(1);
     if (link_locked) {
@@ -635,4 +702,8 @@ bool optolinkIsLocked() {
 
 uint16_t getLinkHandshakes() {
     return link_handhskes;
+}
+
+uint16_t getLinkResyncs() {
+    return link_resyncs;
 }

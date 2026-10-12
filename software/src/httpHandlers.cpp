@@ -9,6 +9,10 @@ void handleHandshakes() {
     server.send(200, "text/plain", String(getLinkHandshakes()));
 }
 
+void handleResyncs() {
+    server.send(200, "text/plain", String(getLinkResyncs()));
+}
+
 bool getDatapointConfig(DatapointConfig *config) {
     if (config == nullptr) return false;
     if (!server.hasArg("addr")) {
@@ -184,6 +188,7 @@ void loopHttp() {
 void setupHttp() {
     server.on("/", handleRoot);
     server.on("/handshakes", handleHandshakes);
+    server.on("/resyncs", handleResyncs);
     server.on("/read", handleRead);
     server.on("/write", handleWrite);
     server.on("/gpio/write", handleGpioWrite);

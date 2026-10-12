@@ -10,6 +10,15 @@
 
 #define OPTOLINK_DATA_SIZE 30
 
+#ifndef LINK_RESYNC_FAILURE_THRESHOLD
+// after this many consecutive failed transactions the link is considered desynced
+#define LINK_RESYNC_FAILURE_THRESHOLD 5
+#endif
+#ifndef LINK_RESYNC_QUIET_TIME
+// how long to stay silent on the optolink after a resync (0x04) so the heater can reset its protocol state
+#define LINK_RESYNC_QUIET_TIME 5000
+#endif
+
 enum OptolinkTelegramError {
     NONE,
     TIMEOUT,
@@ -82,5 +91,6 @@ bool readToBuffer(char* buffer, uint16_t buffer_len, DatapointConfig *config);
 bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config);
 bool writeFromString(const String *value, char* buffer, uint16_t buffer_len, DatapointConfig *config, bool forceWrite);
 uint16_t getLinkHandshakes();
+uint16_t getLinkResyncs();
 
 #endif //SOFTWARE_OPTOLINK_H
